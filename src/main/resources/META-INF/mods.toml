@@ -1,0 +1,27 @@
+modLoader="javafml"
+loaderVersion="[47,)"
+license="MIT"
+[[mods]]
+modId="villagewalls"
+version="${mod_version}"
+displayName="${mod_name}"
+displayURL="https://github.com/your-org/villagewalls"
+credits="Community contributors"
+authors="VillageWalls Contributors"
+description='''
+Data-driven village wall generator for Minecraft Forge 1.20.1.
+'''
+
+[[dependencies.villagewalls]]
+modId="forge"
+mandatory=true
+versionRange="[47,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.villagewalls]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.20.1]"
+ordering="NONE"
+side="BOTH"

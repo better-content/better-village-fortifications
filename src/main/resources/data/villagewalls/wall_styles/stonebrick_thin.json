@@ -1,0 +1,8 @@
+{
+  "primary_block": "minecraft:stone_bricks",
+  "accent_block": "minecraft:stone_brick_wall",
+  "accent_every": 5,
+  "thickness": 1,
+  "height": 3,
+  "walkable": false
+}

@@ -1,0 +1,18 @@
+# Gradle / IDE / Forge
+.gradle/
+/build/
+/run/
+/out/
+
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+bin/
+*.class
+
+# OS junk
+.DS_Store
+Thumbs.db
