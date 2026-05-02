@@ -1,0 +1,8 @@
+{
+  "primary_block": "minecraft:stone_bricks",
+  "accent_block": "minecraft:mossy_stone_bricks",
+  "accent_every": 5,
+  "thickness": 3,
+  "height": 6,
+  "walkable": true
+}

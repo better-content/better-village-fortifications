@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class DoorPlannerTest {
     @Test
-    void picksAllEquallyFlattestSegmentsUpToCap() {
+    void picksFlattestSegmentsWithSpacing() {
         List<SegmentFlatness> flatness = List.of(
                 new SegmentFlatness(0, 3),
                 new SegmentFlatness(1, 1),
@@ -17,7 +17,7 @@ class DoorPlannerTest {
                 new SegmentFlatness(4, 1)
         );
         List<Integer> chosen = DoorPlanner.chooseDoorSegments(flatness, 2);
-        assertEquals(List.of(1, 2), chosen);
+        assertEquals(List.of(1, 4), chosen);
     }
 
     @Test

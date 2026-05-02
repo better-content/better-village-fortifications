@@ -42,9 +42,41 @@ class VillageOutlineSolverTest {
     }
 
     @Test
+    void traceCleanRingEmptyForNoFootprint() {
+        assertEquals(List.of(), VillageOutlineSolver.traceCleanRing(Set.of(), 4));
+    }
+
+    @Test
     void traceBoundarySingleCellWorks() {
         List<GridPos> boundary = VillageOutlineSolver.traceBoundary(Set.of(new GridPos(2, 3)));
         assertEquals(1, boundary.size());
         assertEquals(new GridPos(2, 3), boundary.get(0));
+    }
+
+    @Test
+    void traceCleanRingBuildsExpandedContourAroundFootprint() {
+        Set<GridPos> footprint = Set.of(
+                new GridPos(0, 0),
+                new GridPos(20, 5),
+                new GridPos(4, 18)
+        );
+        List<GridPos> ring = VillageOutlineSolver.traceCleanRing(footprint, 6);
+
+        assertFalse(ring.isEmpty());
+        assertEquals(-6, ring.stream().mapToInt(GridPos::x).min().orElseThrow());
+        assertEquals(27, ring.stream().mapToInt(GridPos::x).max().orElseThrow());
+        assertEquals(-6, ring.stream().mapToInt(GridPos::z).min().orElseThrow());
+        assertEquals(25, ring.stream().mapToInt(GridPos::z).max().orElseThrow());
+    }
+
+    @Test
+    void traceCleanRingGivesSinglePointUsefulMinimumSize() {
+        List<GridPos> ring = VillageOutlineSolver.traceCleanRing(Set.of(new GridPos(10, 10)), 2);
+
+        assertTrue(ring.size() >= 8);
+        assertEquals(8, ring.stream().mapToInt(GridPos::x).min().orElseThrow());
+        assertEquals(13, ring.stream().mapToInt(GridPos::x).max().orElseThrow());
+        assertEquals(8, ring.stream().mapToInt(GridPos::z).min().orElseThrow());
+        assertEquals(13, ring.stream().mapToInt(GridPos::z).max().orElseThrow());
     }
 }

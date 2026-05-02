@@ -5,10 +5,10 @@ import com.example.villagewalls.config.WallStyleRegistry;
 import com.example.villagewalls.world.VillageWallGenerator;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -20,14 +20,14 @@ public class VillageWallsCommands {
 
     @SubscribeEvent
     public void onRegisterCommands(RegisterCommandsEvent event) {
-        LiteralArgumentBuilder<CommandSourceStack> root = Commands.literal("villagewalls")
+        LiteralArgumentBuilder<CommandSourceStack> root = LiteralArgumentBuilder.<CommandSourceStack>literal("villagewalls")
                 .requires(source -> source.hasPermission(2));
 
-        root.then(Commands.literal("build")
-                .then(Commands.argument("style", StringArgumentType.string())
-                        .then(Commands.argument("searchRadius", IntegerArgumentType.integer(32, 256))
-                                .then(Commands.argument("buffer", IntegerArgumentType.integer(2, 24))
-                                        .then(Commands.argument("maxDoors", IntegerArgumentType.integer(1, 16))
+        root.then(LiteralArgumentBuilder.<CommandSourceStack>literal("build")
+                .then(RequiredArgumentBuilder.<CommandSourceStack, String>argument("style", StringArgumentType.string())
+                        .then(RequiredArgumentBuilder.<CommandSourceStack, Integer>argument("searchRadius", IntegerArgumentType.integer(32, 256))
+                                .then(RequiredArgumentBuilder.<CommandSourceStack, Integer>argument("buffer", IntegerArgumentType.integer(2, 24))
+                                        .then(RequiredArgumentBuilder.<CommandSourceStack, Integer>argument("maxDoors", IntegerArgumentType.integer(1, 16))
                                                 .executes(ctx -> executeBuild(
                                                         ctx.getSource(),
                                                         StringArgumentType.getString(ctx, "style"),
@@ -36,7 +36,7 @@ public class VillageWallsCommands {
                                                         IntegerArgumentType.getInteger(ctx, "maxDoors")
                                                 )))))));
 
-        root.then(Commands.literal("styles")
+        root.then(LiteralArgumentBuilder.<CommandSourceStack>literal("styles")
                 .executes(ctx -> {
                     ctx.getSource().sendSuccess(() -> Component.literal("Loaded styles: " + WallStyleRegistry.listStyleIds()), false);
                     return Command.SINGLE_SUCCESS;
@@ -64,12 +64,16 @@ public class VillageWallsCommands {
         }
 
         VillageWallGenerator.Result result = generator.generate(player.serverLevel(), player.blockPosition(), searchRadius, buffer, style, maxDoors);
-        if (result.villagePoints() == 0) {
-            source.sendFailure(Component.literal("No villagers found in radius " + searchRadius));
+        if (result.footprintPoints() == 0) {
+            source.sendFailure(Component.literal("No village structure or POIs found in radius " + searchRadius));
+            return 0;
+        }
+        if (result.perimeterPoints() < 4) {
+            source.sendFailure(Component.literal("Village outline was too small to build a wall. Try a larger buffer."));
             return 0;
         }
         source.sendSuccess(() -> Component.literal(
-                "VillageWalls built. villagers=" + result.villagePoints()
+                "VillageWalls built. footprintPoints=" + result.footprintPoints()
                         + ", perimeterPoints=" + result.perimeterPoints()
                         + ", doorBlocks=" + result.doorsPlaced()),
                 true);

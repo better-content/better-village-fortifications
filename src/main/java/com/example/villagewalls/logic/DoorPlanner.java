@@ -3,8 +3,6 @@ package com.example.villagewalls.logic;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 public final class DoorPlanner {
     private DoorPlanner() {
@@ -16,13 +14,24 @@ public final class DoorPlanner {
         }
         List<SegmentFlatness> sorted = new ArrayList<>(flatness);
         sorted.sort(Comparator.comparingInt(SegmentFlatness::score).thenComparingInt(SegmentFlatness::index));
-        int best = sorted.get(0).score();
 
-        Map<Integer, List<SegmentFlatness>> byScore = sorted.stream().collect(Collectors.groupingBy(SegmentFlatness::score));
-        List<SegmentFlatness> equallyFlat = byScore.get(best).stream()
-                .sorted(Comparator.comparingInt(SegmentFlatness::index))
-                .toList();
+        int segmentCount = flatness.stream().mapToInt(SegmentFlatness::index).max().orElse(0) + 1;
+        int minSpacing = Math.max(2, segmentCount / Math.max(1, maxDoors * 2));
+        List<Integer> chosen = new ArrayList<>();
+        for (SegmentFlatness candidate : sorted) {
+            if (chosen.stream().allMatch(index -> cyclicDistance(index, candidate.index(), segmentCount) >= minSpacing)) {
+                chosen.add(candidate.index());
+            }
+            if (chosen.size() >= maxDoors) {
+                break;
+            }
+        }
+        chosen.sort(Integer::compareTo);
+        return chosen;
+    }
 
-        return equallyFlat.stream().limit(maxDoors).map(SegmentFlatness::index).toList();
+    private static int cyclicDistance(int a, int b, int size) {
+        int distance = Math.abs(a - b);
+        return Math.min(distance, size - distance);
     }
 }
