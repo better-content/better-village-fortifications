@@ -35,6 +35,7 @@ public class AutoVillageWallBuilder {
     private static final int BUFFER_RADIUS = 8;
     private static final int MAX_DOORS = 4;
     private static final int BUILD_DELAY_TICKS = 20;
+    private static final int MAX_AUTOMATIC_BUILDS_PER_TICK = 1;
     private static final int CELL_SIZE_BITS = 7;
     private static final int PROCESSED_CELL_RADIUS = 2;
 
@@ -72,6 +73,7 @@ public class AutoVillageWallBuilder {
         }
 
         MinecraftServer server = event.getServer();
+        int buildsThisTick = 0;
         Iterator<Map.Entry<ResourceKey<Level>, Map<CellKey, PendingBuild>>> levelIterator = pending.entrySet().iterator();
         while (levelIterator.hasNext()) {
             Map.Entry<ResourceKey<Level>, Map<CellKey, PendingBuild>> levelEntry = levelIterator.next();
@@ -81,17 +83,23 @@ public class AutoVillageWallBuilder {
                 continue;
             }
 
-            processLevel(level, levelEntry.getValue());
+            boolean built = processLevel(level, levelEntry.getValue(), buildsThisTick < MAX_AUTOMATIC_BUILDS_PER_TICK);
+            if (built) {
+                buildsThisTick++;
+            }
             if (levelEntry.getValue().isEmpty()) {
                 levelIterator.remove();
+            }
+            if (buildsThisTick >= MAX_AUTOMATIC_BUILDS_PER_TICK) {
+                break;
             }
         }
     }
 
-    private void processLevel(ServerLevel level, Map<CellKey, PendingBuild> levelPending) {
+    private boolean processLevel(ServerLevel level, Map<CellKey, PendingBuild> levelPending, boolean mayBuild) {
         Optional<WallStyle> style = WallStyleRegistry.getStyle(WallStyleRegistry.defaultStyleId());
         if (style.isEmpty()) {
-            return;
+            return false;
         }
 
         ProcessedVillages processed = ProcessedVillages.get(level);
@@ -108,13 +116,21 @@ public class AutoVillageWallBuilder {
                 iterator.remove();
                 continue;
             }
+            if (!mayBuild) {
+                entry.setValue(build);
+                continue;
+            }
 
             VillageWallGenerator.Result result = generator.generate(level, build.origin(), SEARCH_RADIUS, BUFFER_RADIUS, style.get(), MAX_DOORS);
             if (result.perimeterPoints() >= 4) {
                 processed.addArea(entry.getKey(), PROCESSED_CELL_RADIUS);
+            } else {
+                processed.add(entry.getKey());
             }
             iterator.remove();
+            return true;
         }
+        return false;
     }
 
     private record PendingBuild(BlockPos origin, int ticksRemaining) {
