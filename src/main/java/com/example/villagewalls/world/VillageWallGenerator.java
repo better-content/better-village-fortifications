@@ -17,6 +17,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.PoiTypeTags;
 import net.minecraft.tags.StructureTags;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.entity.ai.village.poi.PoiType;
 import net.minecraft.world.level.ChunkPos;
@@ -37,6 +38,7 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.StructurePiece;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.levelgen.structure.Structure;
+import net.minecraft.world.phys.AABB;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayList;
@@ -84,6 +86,7 @@ public class VillageWallGenerator {
             return new Result(footprint.points().size(), perimeter.size(), 0);
         }
 
+        boolean inhabited = hasVillagers(level, origin, searchRadius);
         WallProfile profile = chooseWallProfile(footprint.points(), perimeter, style);
         announceFootprintDebug(level, footprint.points().size(), perimeter.size(), profile);
         TerrainSampler sampler = snapshotTerrain(level, perimeter, profile.style().thickness());
@@ -99,10 +102,16 @@ public class VillageWallGenerator {
             if (placeDoor) {
                 doorCount++;
             }
-            placeSegment(level, a, b, sampler, profile, placeDoor, enclosureTopY, footprint.points(), i);
+            placeSegment(level, a, b, sampler, profile, placeDoor, enclosureTopY, footprint.points(), i, inhabited);
         }
-        placeLightingCampfires(level, perimeter, footprint.points(), profile);
+        if (inhabited) {
+            placeLightingCampfires(level, perimeter, footprint.points(), profile);
+        }
         return new Result(footprint.points().size(), perimeter.size(), doorCount * 2);
+    }
+
+    private static boolean hasVillagers(ServerLevel level, BlockPos origin, int searchRadius) {
+        return !level.getEntitiesOfClass(Villager.class, new AABB(origin).inflate(searchRadius)).isEmpty();
     }
 
     private static WallProfile chooseWallProfile(Set<GridPos> footprint, List<GridPos> perimeter, WallStyle requestedStyle) {
@@ -284,7 +293,7 @@ public class VillageWallGenerator {
     private record VillageFootprint(Set<GridPos> points) {
     }
 
-    private void placeSegment(ServerLevel level, GridPos a, GridPos b, TerrainSampler sampler, WallProfile profile, boolean placeDoor, int enclosureTopY, Set<GridPos> footprint, int segmentIndex) {
+    private void placeSegment(ServerLevel level, GridPos a, GridPos b, TerrainSampler sampler, WallProfile profile, boolean placeDoor, int enclosureTopY, Set<GridPos> footprint, int segmentIndex, boolean inhabited) {
         List<GridPos> line = rasterLine(a, b);
         if (line.isEmpty()) {
             return;
@@ -295,15 +304,16 @@ public class VillageWallGenerator {
         Direction inside = insideDirection(line.get(mid), normal, footprint);
         WallStyle style = profile.style();
         List<List<BlockPos>> rampartRoofLanes = rampartRoofLanes(profile);
+        List<BlockPos> rampartInteriorFloor = new ArrayList<>();
         int doorIndex = placeDoor ? preferredDoorIndex(level, sampler, line, along).orElse(mid) : -1;
-        if (doorIndex >= 0 && (isWaterColumn(level, line.get(doorIndex)) || isWaterColumn(level, line.get(Math.min(line.size() - 1, doorIndex + 1))))) {
+        if (doorIndex >= 0 && (hasSurfaceWater(level, line.get(doorIndex)) || hasSurfaceWater(level, line.get(Math.min(line.size() - 1, doorIndex + 1))))) {
             doorIndex = -1;
         }
         for (int i = 0; i < line.size(); i++) {
             GridPos p = line.get(i);
             int terrainY = sampler.surfaceY(p.x(), p.z());
-            boolean doorBandStart = placeDoor && i == doorIndex;
-            boolean doorBandSkip = placeDoor && i == doorIndex + 1;
+            boolean doorBandStart = placeDoor && doorIndex >= 0 && i == doorIndex;
+            boolean doorBandSkip = placeDoor && doorIndex >= 0 && i == doorIndex + 1;
             if (doorBandStart) {
                 placeDoubleDoor(level, p, a, b, inside, sampler, Blocks.STONE_BRICKS.defaultBlockState(), style.thickness());
                 continue;
@@ -312,19 +322,25 @@ public class VillageWallGenerator {
                 continue;
             }
             for (int t = 0; t < style.thickness(); t++) {
-                GridPos offset = profile.rampart() ? offsetToward(p, inside, t) : offsetForThickness(p, a, b, t);
-                if (isWaterColumn(level, offset)) {
+                GridPos offset = profile.rampart() ? rampartOffset(p, inside, t, style.thickness()) : offsetForThickness(p, a, b, t);
+                if (isWaterTooDeepForWall(level, offset)) {
                     clearOldWallOverWater(level, offset);
                     continue;
                 }
-                int columnBaseY = sampler.surfaceY(offset.x(), offset.z());
-                int visualTopY = cappedWallTopY(columnBaseY, enclosureTopY);
+                int columnBaseY = wallColumnBaseY(level, sampler, offset);
+                int visualTopY = cappedWallTopY(columnBaseY, enclosureTopY, MIN_VISIBLE_WALL_HEIGHT);
                 int roofY = profile.rampart() ? Math.max(columnBaseY, visualTopY - 1) : visualTopY;
                 int bodyTopY = style.walkable() ? Math.max(columnBaseY, roofY - 1) : visualTopY;
-                boolean hollowRampartLane = profile.rampart() && t > 0 && t < style.thickness() - 1;
+                boolean hollowRampartLane = profile.rampart() && isRampartInteriorLane(t, style.thickness());
                 if (hollowRampartLane) {
-                    level.setBlock(new BlockPos(offset.x(), columnBaseY, offset.z()), stoneBrickState(p, columnBaseY), Block.UPDATE_ALL);
-                    for (int y = columnBaseY + 1; y < roofY; y++) {
+                    int interiorFloorY = Math.max(columnBaseY, roofY - 2);
+                    for (int y = columnBaseY; y <= interiorFloorY; y++) {
+                        level.setBlock(new BlockPos(offset.x(), y, offset.z()), stoneBrickState(p, y), Block.UPDATE_ALL);
+                    }
+                    BlockPos interiorFloor = new BlockPos(offset.x(), interiorFloorY, offset.z());
+                    level.setBlock(interiorFloor, stoneBrickState(p, columnBaseY), Block.UPDATE_ALL);
+                    rampartInteriorFloor.add(interiorFloor);
+                    for (int y = interiorFloorY + 1; y < roofY; y++) {
                         level.setBlock(new BlockPos(offset.x(), y, offset.z()), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
                     }
                 } else {
@@ -340,7 +356,7 @@ public class VillageWallGenerator {
                     if (profile.rampart()) {
                         rampartRoofLanes.get(t).add(roof);
                     }
-                    if (profile.rampart() && t == 0) {
+                    if (profile.rampart() && (t == 0 || t == style.thickness() - 1)) {
                         BlockPos parapet = new BlockPos(offset.x(), visualTopY, offset.z());
                         level.setBlock(parapet, rampartParapetState(p, i), Block.UPDATE_ALL);
                     }
@@ -349,12 +365,14 @@ public class VillageWallGenerator {
                 roughenGroundBorder(level, offset, columnBaseY);
             }
             if (shouldPlaceVines(p, i, line.size(), placeDoor)) {
-                placeVines(level, p, normal, terrainY + 1, cappedWallTopY(terrainY, enclosureTopY));
+                placeVines(level, p, normal, terrainY + 1, cappedWallTopY(terrainY, enclosureTopY, MIN_VISIBLE_WALL_HEIGHT));
             }
         }
         if (profile.rampart()) {
             smoothRampartRoof(level, rampartRoofLanes);
-            placeRampartTorches(level, rampartRoofLanes);
+            if (inhabited) {
+                placeRampartTorches(level, rampartInteriorFloor);
+            }
             if (!placeDoor && Math.floorMod(segmentIndex, RAMPART_LADDER_SEGMENT_SPACING) == 0) {
                 placeRampartLadder(level, line.get(mid), inside, sampler, enclosureTopY, style.thickness());
             }
@@ -393,13 +411,9 @@ public class VillageWallGenerator {
         }
     }
 
-    private static void placeRampartTorches(ServerLevel level, List<List<BlockPos>> roofLanes) {
-        if (roofLanes.size() < 3) {
-            return;
-        }
-        List<BlockPos> interiorLane = roofLanes.get(roofLanes.size() / 2);
-        for (int i = RAMPART_TORCH_SPACING / 2; i < interiorLane.size(); i += RAMPART_TORCH_SPACING) {
-            BlockPos support = interiorLane.get(i);
+    private static void placeRampartTorches(ServerLevel level, List<BlockPos> interiorFloor) {
+        for (int i = RAMPART_TORCH_SPACING / 2; i < interiorFloor.size(); i += RAMPART_TORCH_SPACING) {
+            BlockPos support = interiorFloor.get(i);
             BlockPos torchPos = support.above();
             if (level.getBlockState(torchPos).canBeReplaced()
                     && level.getBlockState(support).isFaceSturdy(level, support, Direction.UP)) {
@@ -434,13 +448,14 @@ public class VillageWallGenerator {
     }
 
     private static void placeRampartLadder(ServerLevel level, GridPos wallMidpoint, Direction inside, TerrainSampler sampler, int enclosureTopY, int rampartWidth) {
-        GridPos ladderGrid = offsetToward(wallMidpoint, inside, rampartWidth);
-        if (isWaterColumn(level, ladderGrid)) {
+        int innerWallOffset = Math.max(1, rampartWidth / 2);
+        GridPos ladderGrid = offsetToward(wallMidpoint, inside, innerWallOffset);
+        if (hasSurfaceWater(level, ladderGrid)) {
             return;
         }
         int wallBaseY = sampler.surfaceY(wallMidpoint.x(), wallMidpoint.z());
         int ladderBaseY = sampler.surfaceY(ladderGrid.x(), ladderGrid.z());
-        int roofY = Math.max(wallBaseY + 1, cappedWallTopY(wallBaseY, enclosureTopY) - 1);
+        int roofY = Math.max(wallBaseY + 1, cappedWallTopY(wallBaseY, enclosureTopY, MIN_VISIBLE_WALL_HEIGHT) - 1);
         BlockPos ladderBase = new BlockPos(ladderGrid.x(), ladderBaseY, ladderGrid.z());
         BlockState ladder = Blocks.LADDER.defaultBlockState().setValue(LadderBlock.FACING, inside);
         for (int y = ladderBase.getY(); y <= roofY; y++) {
@@ -453,18 +468,35 @@ public class VillageWallGenerator {
         }
     }
 
-    private static boolean isWaterColumn(ServerLevel level, GridPos pos) {
-        int motionY = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, pos.x(), pos.z());
-        int worldSurfaceY = level.getHeight(Heightmap.Types.WORLD_SURFACE, pos.x(), pos.z());
-        int oceanFloorY = level.getHeight(Heightmap.Types.OCEAN_FLOOR, pos.x(), pos.z());
-        int topY = Math.max(motionY, worldSurfaceY);
-        int bottomY = Math.min(oceanFloorY, topY) - 2;
-        for (int y = topY; y >= bottomY; y--) {
-            if (isWaterOrFluid(level.getBlockState(new BlockPos(pos.x(), y, pos.z())))) {
-                return true;
-            }
+    private static boolean hasSurfaceWater(ServerLevel level, GridPos pos) {
+        return waterDepthAtSurface(level, pos) > 0;
+    }
+
+    private static boolean isWaterTooDeepForWall(ServerLevel level, GridPos pos) {
+        return waterDepthAtSurface(level, pos) > 2;
+    }
+
+    private static int wallColumnBaseY(ServerLevel level, TerrainSampler sampler, GridPos pos) {
+        int baseY = sampler.surfaceY(pos.x(), pos.z());
+        if (waterDepthAtSurface(level, pos) == 0) {
+            return baseY;
         }
-        return false;
+        int oceanFloorY = level.getHeight(Heightmap.Types.OCEAN_FLOOR, pos.x(), pos.z());
+        return Math.min(baseY, oceanFloorY);
+    }
+
+    private static int waterDepthAtSurface(ServerLevel level, GridPos pos) {
+        int worldSurfaceY = level.getHeight(Heightmap.Types.WORLD_SURFACE, pos.x(), pos.z());
+        int y = worldSurfaceY - 1;
+        int depth = 0;
+        while (depth < 16 && y >= level.getMinBuildHeight()) {
+            if (!isWaterOrFluid(level.getBlockState(new BlockPos(pos.x(), y, pos.z())))) {
+                break;
+            }
+            depth++;
+            y--;
+        }
+        return depth;
     }
 
     private static boolean isWaterOrFluid(BlockState state) {
@@ -486,8 +518,8 @@ public class VillageWallGenerator {
         }
     }
 
-    private static int cappedWallTopY(int baseY, int enclosureTopY) {
-        int desiredTopY = Math.max(baseY + MIN_VISIBLE_WALL_HEIGHT, enclosureTopY);
+    private static int cappedWallTopY(int baseY, int enclosureTopY, int minVisibleHeight) {
+        int desiredTopY = Math.max(baseY + minVisibleHeight, enclosureTopY);
         return Math.min(desiredTopY, baseY + MAX_VISIBLE_WALL_HEIGHT - 1);
     }
 
@@ -595,11 +627,12 @@ public class VillageWallGenerator {
     }
 
     private Optional<CampfireCandidate> campfireCandidate(ServerLevel level, GridPos wallPos, Direction inside, WallProfile profile) {
-        if (isWaterColumn(level, wallPos)) {
+        if (hasSurfaceWater(level, wallPos)) {
             return Optional.empty();
         }
-        int minOffset = profile.rampart() ? profile.style().thickness() + MIN_CAMPFIRE_OFFSET : MIN_CAMPFIRE_OFFSET;
-        int maxOffset = profile.rampart() ? profile.style().thickness() + MAX_CAMPFIRE_OFFSET : MAX_CAMPFIRE_OFFSET;
+        int rampartInnerClear = profile.style().thickness() / 2 + 1;
+        int minOffset = profile.rampart() ? rampartInnerClear + MIN_CAMPFIRE_OFFSET : MIN_CAMPFIRE_OFFSET;
+        int maxOffset = profile.rampart() ? rampartInnerClear + MAX_CAMPFIRE_OFFSET : MAX_CAMPFIRE_OFFSET;
         int preferredOffset = minOffset + Math.floorMod(decorativeHash(wallPos.x(), wallPos.z(), 101), (maxOffset - minOffset) + 1);
         for (int attempt = 0; attempt <= maxOffset - minOffset; attempt++) {
             int offset = minOffset + Math.floorMod((preferredOffset - minOffset) + attempt, (maxOffset - minOffset) + 1);
@@ -608,7 +641,7 @@ public class VillageWallGenerator {
             }
             int x = wallPos.x() + (inside.getStepX() * offset);
             int z = wallPos.z() + (inside.getStepZ() * offset);
-            if (isWaterColumn(level, new GridPos(x, z))) {
+            if (hasSurfaceWater(level, new GridPos(x, z))) {
                 continue;
             }
             Optional<BlockPos> target = campfireTarget(level, x, z);
@@ -636,8 +669,9 @@ public class VillageWallGenerator {
 
     private Set<GridPos> campfireLightTargets(ServerLevel level, List<GridPos> perimeter, Set<GridPos> footprint, WallProfile profile) {
         Set<GridPos> targets = new HashSet<>();
-        int minDepth = profile.rampart() ? profile.style().thickness() + MIN_CAMPFIRE_OFFSET : MIN_CAMPFIRE_OFFSET;
-        int maxDepth = profile.rampart() ? profile.style().thickness() + CAMPFIRE_TARGET_DEPTH : CAMPFIRE_TARGET_DEPTH;
+        int rampartInnerClear = profile.style().thickness() / 2 + 1;
+        int minDepth = profile.rampart() ? rampartInnerClear + MIN_CAMPFIRE_OFFSET : MIN_CAMPFIRE_OFFSET;
+        int maxDepth = profile.rampart() ? rampartInnerClear + CAMPFIRE_TARGET_DEPTH : CAMPFIRE_TARGET_DEPTH;
         for (int i = 0; i < perimeter.size(); i++) {
             GridPos a = perimeter.get(i);
             GridPos b = perimeter.get((i + 1) % perimeter.size());
@@ -648,7 +682,7 @@ public class VillageWallGenerator {
                 for (int depth = minDepth; depth <= maxDepth; depth += 2) {
                     int x = wallPos.x() + (inside.getStepX() * depth);
                     int z = wallPos.z() + (inside.getStepZ() * depth);
-                    if (isWaterColumn(level, new GridPos(x, z))) {
+                    if (hasSurfaceWater(level, new GridPos(x, z))) {
                         continue;
                     }
                     BlockPos surface = new BlockPos(x, level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z), z);
@@ -872,6 +906,15 @@ public class VillageWallGenerator {
         return new GridPos(p.x() + (direction.getStepX() * distance), p.z() + (direction.getStepZ() * distance));
     }
 
+    private static GridPos rampartOffset(GridPos p, Direction inside, int lane, int thickness) {
+        int half = thickness / 2;
+        return offsetToward(p, inside, lane - half);
+    }
+
+    private static boolean isRampartInteriorLane(int lane, int thickness) {
+        return lane == (thickness / 2);
+    }
+
     private static BlockState rampartParapetState(GridPos p, int index) {
         if (jitteredIntervalHit(p, index, 5, 149)) {
             return Blocks.MOSSY_STONE_BRICK_WALL.defaultBlockState();
@@ -923,9 +966,10 @@ public class VillageWallGenerator {
         }
         BlockPos start = left.relative(along).equals(right) ? left : right;
         int baseY = Math.min(left.getY(), right.getY());
+        int half = thickness / 2;
         for (int width = 0; width < 2; width++) {
             BlockPos widthPos = start.relative(along, width);
-            for (int depth = 0; depth < thickness; depth++) {
+            for (int depth = -half; depth <= half; depth++) {
                 BlockPos tunnel = widthPos.relative(inside, depth);
                 for (int dy = 0; dy <= 3; dy++) {
                     level.setBlock(new BlockPos(tunnel.getX(), baseY + dy, tunnel.getZ()), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
@@ -976,7 +1020,7 @@ public class VillageWallGenerator {
             for (int depth = -GATE_APRON_DEPTH; depth <= GATE_APRON_DEPTH; depth++) {
                 BlockPos sample = widthBase.relative(facing, depth);
                 GridPos grid = new GridPos(sample.getX(), sample.getZ());
-                if (isWaterColumn(level, grid)) {
+                if (hasSurfaceWater(level, grid)) {
                     continue;
                 }
                 int groundY = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, sample.getX(), sample.getZ()) - 1;
