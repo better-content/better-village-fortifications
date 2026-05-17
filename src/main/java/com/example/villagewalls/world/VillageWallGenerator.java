@@ -55,7 +55,6 @@ public class VillageWallGenerator {
     private static final int MIN_VISIBLE_WALL_HEIGHT = 3;
     private static final int MAX_VISIBLE_WALL_HEIGHT = 6;
     private static final int VINE_SPACING = 9;
-    private static final int MISSING_BLOCK_RATE = 47;
     private static final int PATH_GATE_SCAN_DEPTH = 12;
     private static final int PATH_GATE_SCORE_BONUS = 100_000;
     private static final int MIN_CAMPFIRE_OFFSET = 2;
@@ -227,19 +226,20 @@ public class VillageWallGenerator {
     private VillageFootprint collectFootprint(ServerLevel level, BlockPos origin, int searchRadius) {
         Set<GridPos> points = new HashSet<>();
 
-        Set<GridPos> structurePoints = collectVillageStructureFootprint(level, origin, searchRadius);
-        if (!structurePoints.isEmpty()) {
-            points.addAll(structurePoints);
-            return new VillageFootprint(points);
-        }
+        points.addAll(collectVillageStructureFootprint(level, origin, searchRadius));
+        points.addAll(collectVillagePoiFootprint(level, origin, searchRadius));
 
+        return new VillageFootprint(points);
+    }
+
+    private Set<GridPos> collectVillagePoiFootprint(ServerLevel level, BlockPos origin, int searchRadius) {
+        Set<GridPos> points = new HashSet<>();
         level.getPoiManager().ensureLoadedAndValid(level, origin, searchRadius);
         Predicate<Holder<PoiType>> villagePoi = holder -> holder.is(PoiTypeTags.VILLAGE);
         level.getPoiManager()
                 .findAll(villagePoi, pos -> true, origin, searchRadius, PoiManager.Occupancy.ANY)
                 .forEach(pos -> points.add(new GridPos(pos.getX(), pos.getZ())));
-
-        return new VillageFootprint(points);
+        return points;
     }
 
     private Set<GridPos> collectVillageStructureFootprint(ServerLevel level, BlockPos origin, int searchRadius) {
@@ -323,12 +323,9 @@ public class VillageWallGenerator {
             }
             for (int t = 0; t < style.thickness(); t++) {
                 GridPos offset = profile.rampart() ? rampartOffset(p, inside, t, style.thickness()) : offsetForThickness(p, a, b, t);
-                if (isWaterTooDeepForWall(level, offset)) {
-                    clearOldWallOverWater(level, offset);
-                    continue;
-                }
                 int columnBaseY = wallColumnBaseY(level, sampler, offset);
-                int visualTopY = cappedWallTopY(columnBaseY, enclosureTopY, MIN_VISIBLE_WALL_HEIGHT);
+                int visibleBaseY = sampler.surfaceY(offset.x(), offset.z());
+                int visualTopY = cappedWallTopY(visibleBaseY, enclosureTopY, MIN_VISIBLE_WALL_HEIGHT);
                 int roofY = profile.rampart() ? Math.max(columnBaseY, visualTopY - 1) : visualTopY;
                 int bodyTopY = style.walkable() ? Math.max(columnBaseY, roofY - 1) : visualTopY;
                 boolean hollowRampartLane = profile.rampart() && isRampartInteriorLane(t, style.thickness());
@@ -346,8 +343,7 @@ public class VillageWallGenerator {
                 } else {
                     for (int y = columnBaseY; y <= bodyTopY; y++) {
                         BlockPos pos = new BlockPos(offset.x(), y, offset.z());
-                        BlockState state = !profile.rampart() && shouldLeaveMissingBlock(p, y, columnBaseY, bodyTopY) ? Blocks.AIR.defaultBlockState() : stoneBrickState(p, y);
-                        level.setBlock(pos, state, Block.UPDATE_ALL);
+                        level.setBlock(pos, stoneBrickState(p, y), Block.UPDATE_ALL);
                     }
                 }
                 if (style.walkable()) {
@@ -472,10 +468,6 @@ public class VillageWallGenerator {
         return waterDepthAtSurface(level, pos) > 0;
     }
 
-    private static boolean isWaterTooDeepForWall(ServerLevel level, GridPos pos) {
-        return waterDepthAtSurface(level, pos) > 2;
-    }
-
     private static int wallColumnBaseY(ServerLevel level, TerrainSampler sampler, GridPos pos) {
         int baseY = sampler.surfaceY(pos.x(), pos.z());
         if (waterDepthAtSurface(level, pos) == 0) {
@@ -501,21 +493,6 @@ public class VillageWallGenerator {
 
     private static boolean isWaterOrFluid(BlockState state) {
         return state.is(Blocks.WATER) || !state.getFluidState().isEmpty();
-    }
-
-    private static void clearOldWallOverWater(ServerLevel level, GridPos wallPos) {
-        int topY = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, wallPos.x(), wallPos.z()) + 32;
-        int bottomY = level.getMinBuildHeight();
-        for (int y = topY; y >= bottomY; y--) {
-            BlockPos pos = new BlockPos(wallPos.x(), y, wallPos.z());
-            BlockState state = level.getBlockState(pos);
-            if (isWaterOrFluid(state)) {
-                return;
-            }
-            if (isGeneratedWallBlock(state)) {
-                level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-            }
-        }
     }
 
     private static int cappedWallTopY(int baseY, int enclosureTopY, int minVisibleHeight) {
@@ -812,13 +789,6 @@ public class VillageWallGenerator {
     }
 
     private record CampfireCandidate(GridPos gridPos, BlockPos pos, Direction facing) {
-    }
-
-    private static boolean shouldLeaveMissingBlock(GridPos p, int y, int baseY, int topY) {
-        return y > baseY
-                && y < topY
-                && topY - baseY >= 4
-                && Math.floorMod(decorativeHash(p.x(), p.z() + y, 71), MISSING_BLOCK_RATE) == 0;
     }
 
     private static BlockState stoneBrickState(GridPos p, int y) {

@@ -1,6 +1,7 @@
 package com.example.villagewalls.world;
 
 import com.example.villagewalls.VillageWalls;
+import com.example.villagewalls.config.VillageWallsConfig;
 import com.example.villagewalls.config.WallStyle;
 import com.example.villagewalls.config.WallStyleRegistry;
 import net.minecraft.core.BlockPos;
@@ -36,43 +37,44 @@ public class AutoVillageWallBuilder {
     private static final int MAX_DOORS = 4;
     private static final int BUILD_DELAY_TICKS = 20;
     private static final int MAX_AUTOMATIC_BUILDS_PER_TICK = 1;
-    private static final int CELL_SIZE_BITS = 7;
-    private static final int PROCESSED_CELL_RADIUS = 2;
+    private static final int CELL_SIZE_BITS = 4;
+    private static final int PLAYER_SCAN_INTERVAL_TICKS = 100;
+    private static final int PLAYER_SCAN_CHUNK_RADIUS = 8;
 
     private final VillageWallGenerator generator = new VillageWallGenerator();
     private final Map<ResourceKey<Level>, Map<CellKey, PendingBuild>> pending = new HashMap<>();
+    private int playerScanCooldown = PLAYER_SCAN_INTERVAL_TICKS;
 
     @SubscribeEvent
     public void onChunkLoad(ChunkEvent.Load event) {
         if (!(event.getLevel() instanceof ServerLevel level)) {
             return;
         }
+        if (!VillageWallsConfig.AUTOMATIC_WALLS_ENABLED.get()) {
+            return;
+        }
 
-        ChunkPos chunk = event.getChunk().getPos();
-        ProcessedVillages processed = ProcessedVillages.get(level);
-        Registry<Structure> structures = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
-
-        level.structureManager()
-                .startsForStructure(chunk, structure -> isVillageStructure(structures, structure))
-                .stream()
-                .filter(StructureStart::isValid)
-                .forEach(start -> {
-                    BlockPos origin = start.getBoundingBox().getCenter();
-                    CellKey key = CellKey.from(origin);
-                    if (!processed.contains(key)) {
-                        pending.computeIfAbsent(level.dimension(), ignored -> new HashMap<>())
-                                .putIfAbsent(key, new PendingBuild(origin, BUILD_DELAY_TICKS));
-                    }
-                });
+        enqueueVillageStarts(level, event.getChunk().getPos(), "chunk_load");
     }
 
     @SubscribeEvent
     public void onServerTick(TickEvent.ServerTickEvent event) {
-        if (event.phase != TickEvent.Phase.END || pending.isEmpty()) {
+        if (event.phase != TickEvent.Phase.END) {
             return;
         }
 
         MinecraftServer server = event.getServer();
+        if (VillageWallsConfig.AUTOMATIC_WALLS_ENABLED.get()) {
+            playerScanCooldown--;
+            if (playerScanCooldown <= 0) {
+                playerScanCooldown = PLAYER_SCAN_INTERVAL_TICKS;
+                scanAroundPlayers(server);
+            }
+        }
+        if (pending.isEmpty()) {
+            return;
+        }
+
         int buildsThisTick = 0;
         Iterator<Map.Entry<ResourceKey<Level>, Map<CellKey, PendingBuild>>> levelIterator = pending.entrySet().iterator();
         while (levelIterator.hasNext()) {
@@ -121,16 +123,60 @@ public class AutoVillageWallBuilder {
                 continue;
             }
 
+            if (level.getRandom().nextDouble() >= VillageWallsConfig.AUTOMATIC_WALL_CHANCE.get()) {
+                VillageWalls.LOGGER.info("Skipping automatic wall for village cell {} by configured chance {}", entry.getKey(), VillageWallsConfig.AUTOMATIC_WALL_CHANCE.get());
+                processed.add(entry.getKey());
+                iterator.remove();
+                return true;
+            }
+
             VillageWallGenerator.Result result = generator.generate(level, build.origin(), SEARCH_RADIUS, BUFFER_RADIUS, style.get(), MAX_DOORS);
             if (result.perimeterPoints() >= 4) {
-                processed.addArea(entry.getKey(), PROCESSED_CELL_RADIUS);
-            } else {
+                VillageWalls.LOGGER.info("Built automatic wall for village cell {} at {} with {} perimeter points", entry.getKey(), build.origin(), result.perimeterPoints());
                 processed.add(entry.getKey());
+            } else {
+                VillageWalls.LOGGER.warn("Automatic wall generation found no valid footprint for village cell {} at {}; it will be retried if the village is seen again", entry.getKey(), build.origin());
             }
             iterator.remove();
             return true;
         }
         return false;
+    }
+
+    private void scanAroundPlayers(MinecraftServer server) {
+        for (ServerLevel level : server.getAllLevels()) {
+            level.players().forEach(player -> {
+                ChunkPos playerChunk = player.chunkPosition();
+                ChunkPos.rangeClosed(
+                                new ChunkPos(playerChunk.x - PLAYER_SCAN_CHUNK_RADIUS, playerChunk.z - PLAYER_SCAN_CHUNK_RADIUS),
+                                new ChunkPos(playerChunk.x + PLAYER_SCAN_CHUNK_RADIUS, playerChunk.z + PLAYER_SCAN_CHUNK_RADIUS))
+                        .filter(chunk -> level.getChunkSource().hasChunk(chunk.x, chunk.z))
+                        .forEach(chunk -> enqueueVillageStarts(level, chunk, "player_scan"));
+            });
+        }
+    }
+
+    private void enqueueVillageStarts(ServerLevel level, ChunkPos chunk, String source) {
+        ProcessedVillages processed = ProcessedVillages.get(level);
+        Registry<Structure> structures = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
+        Map<CellKey, PendingBuild> levelPending = pending.computeIfAbsent(level.dimension(), ignored -> new HashMap<>());
+
+        level.structureManager()
+                .startsForStructure(chunk, structure -> isVillageStructure(structures, structure))
+                .stream()
+                .filter(StructureStart::isValid)
+                .forEach(start -> {
+                    BlockPos origin = start.getBoundingBox().getCenter();
+                    CellKey key = CellKey.from(origin);
+                    if (!processed.contains(key) && !levelPending.containsKey(key)) {
+                        VillageWalls.LOGGER.info("Queued automatic wall for village cell {} at {} from {}", key, origin, source);
+                        levelPending.put(key, new PendingBuild(origin, BUILD_DELAY_TICKS));
+                    }
+                });
+
+        if (levelPending.isEmpty()) {
+            pending.remove(level.dimension());
+        }
     }
 
     private record PendingBuild(BlockPos origin, int ticksRemaining) {
@@ -167,7 +213,7 @@ public class AutoVillageWallBuilder {
     }
 
     private static class ProcessedVillages extends SavedData {
-        private static final String NAME = VillageWalls.MOD_ID + "_processed_villages_v6";
+        private static final String NAME = VillageWalls.MOD_ID + "_processed_villages_v7";
         private final Set<CellKey> cells = new HashSet<>();
 
         static ProcessedVillages get(ServerLevel level) {
@@ -189,18 +235,6 @@ public class AutoVillageWallBuilder {
 
         void add(CellKey key) {
             if (cells.add(key)) {
-                setDirty();
-            }
-        }
-
-        void addArea(CellKey center, int radius) {
-            boolean changed = false;
-            for (int dx = -radius; dx <= radius; dx++) {
-                for (int dz = -radius; dz <= radius; dz++) {
-                    changed |= cells.add(new CellKey(center.x() + dx, center.z() + dz));
-                }
-            }
-            if (changed) {
                 setDirty();
             }
         }
