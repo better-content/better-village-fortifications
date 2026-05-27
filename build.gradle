@@ -38,6 +38,17 @@ minecraft {
                 }
             }
         }
+        gameTestServer {
+            workingDirectory project.file('run-gametest')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+            property 'forge.enabledGameTestNamespaces', 'villagewalls,minecraft'
+            mods {
+                villagewalls {
+                    source sourceSets.main
+                }
+            }
+        }
         data {
             workingDirectory project.file('run')
             args '--mod', 'villagewalls', '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
@@ -57,6 +68,17 @@ repositories {
 dependencies {
     minecraft 'net.minecraftforge:forge:1.20.1-47.3.0'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+}
+
+if (file('src/gameteststructures').exists()) {
+    tasks.register('syncGameTestStructures', Copy) {
+        from('src/gameteststructures')
+        into(project.file('run-gametest/gameteststructures'))
+    }
+
+    tasks.matching { it.name.startsWith('prepareRun') }.configureEach {
+        dependsOn(tasks.named('syncGameTestStructures'))
+    }
 }
 
 tasks.named('processResources', ProcessResources).configure { task ->
