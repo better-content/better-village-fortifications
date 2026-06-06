@@ -36,6 +36,7 @@ public class AutoVillageWallBuilder {
     private static final int BUFFER_RADIUS = 8;
     private static final int MAX_DOORS = 4;
     private static final int BUILD_DELAY_TICKS = 20;
+    private static final int INCOMPLETE_SEARCH_RETRY_TICKS = 100;
     private static final int MAX_AUTOMATIC_BUILDS_PER_TICK = 1;
     private static final int CELL_SIZE_BITS = 4;
     private static final int PLAYER_SCAN_INTERVAL_TICKS = 100;
@@ -123,6 +124,22 @@ public class AutoVillageWallBuilder {
                 continue;
             }
 
+            Optional<ChunkPos> missingChunk = ChunkLoadTracker.firstMissingSearchChunk(
+                    build.origin(),
+                    SEARCH_RADIUS,
+                    level.getChunkSource()::hasChunk
+            );
+            if (missingChunk.isPresent()) {
+                VillageWalls.LOGGER.debug(
+                        "Deferring automatic wall for village cell {} at {}; search chunk {} is not loaded yet",
+                        entry.getKey(),
+                        build.origin(),
+                        missingChunk.get()
+                );
+                entry.setValue(build.retryAfter(INCOMPLETE_SEARCH_RETRY_TICKS));
+                continue;
+            }
+
             if (level.getRandom().nextDouble() >= VillageWallsConfig.AUTOMATIC_WALL_CHANCE.get()) {
                 VillageWalls.LOGGER.info("Skipping automatic wall for village cell {} by configured chance {}", entry.getKey(), VillageWallsConfig.AUTOMATIC_WALL_CHANCE.get());
                 processed.add(entry.getKey());
@@ -131,6 +148,11 @@ public class AutoVillageWallBuilder {
             }
 
             VillageWallGenerator.Result result = generator.generate(level, build.origin(), SEARCH_RADIUS, BUFFER_RADIUS, style.get(), MAX_DOORS);
+            if (result.status() == VillageWallGenerator.Status.INCOMPLETE_SEARCH_AREA) {
+                VillageWalls.LOGGER.debug("Deferring automatic wall for village cell {} at {}; search area became incomplete during generation", entry.getKey(), build.origin());
+                entry.setValue(build.retryAfter(INCOMPLETE_SEARCH_RETRY_TICKS));
+                continue;
+            }
             if (result.perimeterPoints() >= 4) {
                 VillageWalls.LOGGER.info("Built automatic wall for village cell {} at {} with {} perimeter points", entry.getKey(), build.origin(), result.perimeterPoints());
                 processed.add(entry.getKey());
@@ -182,6 +204,10 @@ public class AutoVillageWallBuilder {
     private record PendingBuild(BlockPos origin, int ticksRemaining) {
         PendingBuild tickDown() {
             return new PendingBuild(origin, ticksRemaining - 1);
+        }
+
+        PendingBuild retryAfter(int ticks) {
+            return new PendingBuild(origin, ticks);
         }
     }
 

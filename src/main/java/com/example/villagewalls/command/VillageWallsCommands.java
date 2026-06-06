@@ -64,6 +64,10 @@ public class VillageWallsCommands {
         }
 
         VillageWallGenerator.Result result = generator.generate(player.serverLevel(), player.blockPosition(), searchRadius, buffer, style, maxDoors);
+        if (result.status() == VillageWallGenerator.Status.INCOMPLETE_SEARCH_AREA) {
+            source.sendFailure(Component.literal("Cannot build yet: not all chunks in radius " + searchRadius + " are loaded."));
+            return 0;
+        }
         if (result.footprintPoints() == 0) {
             source.sendFailure(Component.literal("No village structure or POIs found in radius " + searchRadius));
             return 0;

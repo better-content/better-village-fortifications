@@ -71,18 +71,37 @@ public class VillageWallGenerator {
     private static final int RAMPART_TORCH_SPACING = 8;
     private static final boolean FORCE_RAMPARTS_FOR_TESTING = false;
 
-    public record Result(int footprintPoints, int perimeterPoints, int doorsPlaced) {
+    public enum Status {
+        BUILT,
+        INCOMPLETE_SEARCH_AREA,
+        NO_FOOTPRINT,
+        OUTLINE_TOO_SMALL
+    }
+
+    public record Result(Status status, int footprintPoints, int perimeterPoints, int doorsPlaced) {
+        public Result(int footprintPoints, int perimeterPoints, int doorsPlaced) {
+            this(Status.BUILT, footprintPoints, perimeterPoints, doorsPlaced);
+        }
     }
 
     public Result generate(ServerLevel level, BlockPos origin, int searchRadius, int bufferRadius, WallStyle style, int maxDoors) {
+        Optional<ChunkPos> missingChunk = ChunkLoadTracker.firstMissingSearchChunk(
+                origin,
+                searchRadius,
+                level.getChunkSource()::hasChunk
+        );
+        if (missingChunk.isPresent()) {
+            return new Result(Status.INCOMPLETE_SEARCH_AREA, 0, 0, 0);
+        }
+
         VillageFootprint footprint = collectFootprint(level, origin, searchRadius);
         if (footprint.points().isEmpty()) {
-            return new Result(0, 0, 0);
+            return new Result(Status.NO_FOOTPRINT, 0, 0, 0);
         }
 
         List<GridPos> perimeter = VillageOutlineSolver.traceCleanRing(footprint.points(), Math.max(bufferRadius, MIN_ENCLOSURE_BUFFER));
         if (perimeter.size() < 4) {
-            return new Result(footprint.points().size(), perimeter.size(), 0);
+            return new Result(Status.OUTLINE_TOO_SMALL, footprint.points().size(), perimeter.size(), 0);
         }
 
         boolean inhabited = hasVillagers(level, origin, searchRadius);
@@ -106,7 +125,7 @@ public class VillageWallGenerator {
         if (inhabited) {
             placeLightingCampfires(level, perimeter, footprint.points(), profile);
         }
-        return new Result(footprint.points().size(), perimeter.size(), doorCount * 2);
+        return new Result(Status.BUILT, footprint.points().size(), perimeter.size(), doorCount * 2);
     }
 
     private static boolean hasVillagers(ServerLevel level, BlockPos origin, int searchRadius) {
