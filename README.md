@@ -50,7 +50,8 @@ Rules:
 ## Build and Test
 
 ```bash
-./gradlew clean check jacocoTestReport
+./gradlew verifyFast
+./gradlew verifyFull
 ```
 
-Coverage verification is enforced for core logic and config classes via JaCoCo in the Gradle build.
+Coverage verification is enforced for core logic and config classes via JaCoCo in `verifyFast`. `verifyFull` adds the headless Forge GameTest pass.
