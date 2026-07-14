@@ -2,7 +2,11 @@
 .gradle/
 /build/
 /run/
+/run-gametest/*
+!/run-gametest/gameteststructures/
+!/run-gametest/gameteststructures/**
 /out/
+logs/
 
 .idea/
 .vscode/
