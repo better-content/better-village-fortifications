@@ -2,7 +2,18 @@
 .gradle/
 /build/
 /run/
+/run-gametest/
 /out/
+logs/
+*.log
+*.log.gz
+server.properties
+eula.txt
+options.txt
+usercache.json
+
+!/run-gametest/gameteststructures/
+!/run-gametest/gameteststructures/*.snbt
 
 .idea/
 .vscode/
