@@ -16,6 +16,11 @@ class VillageWallGeneratorTest {
         assertEquals(new GridPos(0, 0), line.get(0));
         assertEquals(new GridPos(4, 2), line.get(line.size() - 1));
         assertTrue(line.size() >= 5);
+        for (int i = 1; i < line.size(); i++) {
+            int dx = Math.abs(line.get(i).x() - line.get(i - 1).x());
+            int dz = Math.abs(line.get(i).z() - line.get(i - 1).z());
+            assertTrue(dx <= 1 && dz <= 1 && (dx + dz) > 0, "raster line must step through adjacent cells");
+        }
     }
 
     @Test
@@ -51,6 +56,7 @@ class VillageWallGeneratorTest {
         VillageWallGenerator generator = new VillageWallGenerator();
         List<Integer> clamped = generator.clampStepDeltas(List.of(64, 70, 70, 65), 1);
 
+        assertEquals(4, clamped.size());
         for (int i = 1; i < clamped.size(); i++) {
             assertTrue(Math.abs(clamped.get(i) - clamped.get(i - 1)) <= 1);
         }
