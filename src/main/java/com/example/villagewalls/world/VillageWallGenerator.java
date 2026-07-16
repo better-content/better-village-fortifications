@@ -12,7 +12,6 @@ import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.PoiTypeTags;
@@ -106,7 +105,6 @@ public class VillageWallGenerator {
 
         boolean inhabited = hasVillagers(level, origin, searchRadius);
         WallProfile profile = chooseWallProfile(footprint.points(), perimeter, style);
-        announceFootprintDebug(level, footprint.points().size(), perimeter.size(), profile);
         TerrainSampler sampler = snapshotTerrain(level, perimeter, profile.style().thickness());
         int enclosureTopY = enclosureTopY(perimeter, sampler, profile.style().height());
         List<SegmentFlatness> segmentFlatness = scoreSegments(perimeter, sampler, level);
@@ -151,15 +149,6 @@ public class VillageWallGenerator {
     }
 
     private record WallProfile(WallStyle style, boolean rampart) {
-    }
-
-    private static void announceFootprintDebug(ServerLevel level, int footprintPoints, int perimeterPoints, WallProfile profile) {
-        level.getServer().getPlayerList().broadcastSystemMessage(Component.literal(
-                "Village wall footprint: " + footprintPoints
-                        + " cells, perimeter " + perimeterPoints
-                        + ", style " + (profile.rampart() ? "rampart" : "small")
-                        + (FORCE_RAMPARTS_FOR_TESTING ? " (forced)" : "")
-        ), false);
     }
 
     public List<SegmentFlatness> scoreSegments(List<GridPos> perimeter, TerrainSampler sampler) {
