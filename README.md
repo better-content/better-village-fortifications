@@ -55,3 +55,7 @@ Rules:
 ```
 
 Coverage verification is enforced for core logic and config classes via JaCoCo in `verifyFast`. `verifyFull` adds the headless Forge GameTest pass.
+
+## Community and support
+
+For modpack and mod discussion, playtest feedback, and bug reports, join the [Better Content Discord](https://discord.gg/EkRnZbzqS9).
