@@ -5,28 +5,28 @@ Village Walls is a server-side mod that detects a village footprint from generat
 ## Features
 
 - Village perimeter tracing with configurable buffer radius.
-- Data-driven wall styles loaded from datapack JSON under `data/villagewalls/wall_styles`.
+- Data-driven wall styles loaded from datapack JSON under `data/village_walls/wall_styles`.
 - Automatic wall generation when village structure chunks load on the server.
 - Automatic flatness scoring of wall segments.
 - One primary adjacent double-door gate on the flattest segment.
 - Additional gates on other equally flat segments (up to a configured cap).
 - Four default styles included:
-  - `villagewalls:cobble_spruce_thin`
-  - `villagewalls:cobble_spruce_tall_walkable`
-  - `villagewalls:stonebrick_thin`
-  - `villagewalls:deepslate_tall_walkable`
+  - `village_walls:cobble_spruce_thin`
+  - `village_walls:cobble_spruce_tall_walkable`
+  - `village_walls:stonebrick_thin`
+  - `village_walls:deepslate_tall_walkable`
 
 ## Command
 
 Walls are built automatically with the default style when village structure chunks load. Use the command for manual builds, alternate styles, or custom radii:
 
-- `/villagewalls styles`
-- `/villagewalls build <style> <searchRadius> <buffer> <maxDoors>`
+- `/village_walls styles`
+- `/village_walls build <style> <searchRadius> <buffer> <maxDoors>`
 
 Example:
 
 ```text
-/villagewalls build villagewalls:cobble_spruce_tall_walkable 128 6 8
+/village_walls build village_walls:cobble_spruce_tall_walkable 128 6 8
 ```
 
 ## Wall Style JSON Schema
@@ -59,3 +59,12 @@ Coverage verification is enforced for core logic and config classes via JaCoCo i
 ## Community and support
 
 For modpack and mod discussion, playtest feedback, and bug reports, join the [Better Content Discord](https://discord.gg/EkRnZbzqS9).
+
+## Canonical identity
+
+- Repository and release artifact: `village-walls`
+- Mod ID and resource namespace: `village_walls`
+- Java package: `com.bettercontent.villagewalls`
+- Validation: `./gradlew verifyFull`
+
+This normalization is a clean break. Worlds, configuration files, and integrations created for earlier identities are not migrated or aliased.

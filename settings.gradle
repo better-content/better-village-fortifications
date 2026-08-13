@@ -12,4 +12,4 @@ pluginManagement {
     }
 }
 
-rootProject.name = 'villagewalls'
+rootProject.name = 'village-walls'

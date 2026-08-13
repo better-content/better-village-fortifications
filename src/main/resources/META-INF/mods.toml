@@ -2,24 +2,24 @@ modLoader="javafml"
 loaderVersion="[47,)"
 license="AGPL-3.0-or-later"
 [[mods]]
-modId="villagewalls"
+modId="village_walls"
 version="${mod_version}"
 displayName="${mod_name}"
-displayURL="https://github.com/your-org/villagewalls"
+displayURL="https://github.com/your-org/village_walls"
 credits="Community contributors"
 authors="VillageWalls Contributors"
 description='''
 Data-driven village wall generator for Minecraft Forge 1.20.1.
 '''
 
-[[dependencies.villagewalls]]
+[[dependencies.village_walls]]
 modId="forge"
 mandatory=true
 versionRange="[47,)"
 ordering="NONE"
 side="BOTH"
 
-[[dependencies.villagewalls]]
+[[dependencies.village_walls]]
 modId="minecraft"
 mandatory=true
 versionRange="[1.20.1]"

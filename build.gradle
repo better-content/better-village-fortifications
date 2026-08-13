@@ -6,10 +6,10 @@ plugins {
     id 'net.minecraftforge.gradle' version '[6.0,6.2)'
 }
 
-group = 'com.example.villagewalls'
+group = 'com.bettercontent'
 version = '1.0.0'
 base {
-    archivesName = 'villagewalls'
+    archivesName = 'village-walls'
 }
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
@@ -23,7 +23,7 @@ minecraft {
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
             mods {
-                villagewalls {
+                village_walls {
                     source sourceSets.main
                 }
             }
@@ -33,7 +33,7 @@ minecraft {
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
             mods {
-                villagewalls {
+                village_walls {
                     source sourceSets.main
                 }
             }
@@ -42,18 +42,18 @@ minecraft {
             workingDirectory project.file('run-gametest')
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
-            property 'forge.enabledGameTestNamespaces', 'villagewalls,minecraft'
+            property 'forge.enabledGameTestNamespaces', 'village_walls,minecraft'
             mods {
-                villagewalls {
+                village_walls {
                     source sourceSets.main
                 }
             }
         }
         data {
             workingDirectory project.file('run')
-            args '--mod', 'villagewalls', '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+            args '--mod', 'village_walls', '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
             mods {
-                villagewalls {
+                village_walls {
                     source sourceSets.main
                 }
             }
@@ -66,7 +66,7 @@ repositories {
 }
 
 dependencies {
-    minecraft 'net.minecraftforge:forge:1.20.1-47.3.0'
+    minecraft 'net.minecraftforge:forge:1.20.1-47.4.13'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
 }
 
@@ -84,9 +84,9 @@ if (file('src/gameteststructures').exists()) {
 tasks.named('processResources', ProcessResources).configure { task ->
     var replaceProperties = [
             minecraft_version   : '1.20.1',
-            forge_version       : '47.3.0',
+            forge_version       : '47.4.13',
             mod_version        : project.version,
-            mod_id             : 'villagewalls',
+            mod_id             : 'village_walls',
             mod_name           : 'Village Walls'
     ]
     inputs.properties replaceProperties
@@ -100,11 +100,11 @@ tasks.named('jar', Jar).configure {
     manifest {
         attributes([
                 'Specification-Title'     : 'Village Walls',
-                'Specification-Vendor'    : 'villagewalls',
+                'Specification-Vendor'    : 'village_walls',
                 'Specification-Version'   : '1',
                 'Implementation-Title'    : project.name,
                 'Implementation-Version'  : project.version,
-                'Implementation-Vendor'   : 'villagewalls',
+                'Implementation-Vendor'   : 'village_walls',
                 'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
         ])
     }
@@ -152,7 +152,7 @@ tasks.named('jacocoTestCoverageVerification', JacocoCoverageVerification).config
         rule {
             element = 'CLASS'
             includes = [
-                    'com.example.villagewalls.logic.*'
+                    'com.bettercontent.villagewalls.logic.*'
             ]
             limit {
                 counter = 'LINE'
@@ -163,8 +163,8 @@ tasks.named('jacocoTestCoverageVerification', JacocoCoverageVerification).config
         rule {
             element = 'CLASS'
             includes = [
-                    'com.example.villagewalls.config.WallStyleRegistry',
-                    'com.example.villagewalls.config.WallStyle'
+                    'com.bettercontent.villagewalls.config.WallStyleRegistry',
+                    'com.bettercontent.villagewalls.config.WallStyle'
             ]
             limit {
                 counter = 'LINE'

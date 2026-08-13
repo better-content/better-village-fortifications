@@ -1,22 +1,12 @@
-# Gradle / IDE / Forge
 .gradle/
-/build/
-/run/
-/run-gametest/*
-!/run-gametest/gameteststructures/
-!/run-gametest/gameteststructures/**
-/out/
+build/
+out/
+run/
+run-*/
 logs/
-
 .idea/
 .vscode/
 *.iml
-*.ipr
-*.iws
-
-bin/
-*.class
-
-# OS junk
+*.log
 .DS_Store
 Thumbs.db
