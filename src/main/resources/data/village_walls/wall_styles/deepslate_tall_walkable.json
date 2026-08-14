@@ -1,8 +1,0 @@
-{
-  "primary_block": "minecraft:polished_deepslate",
-  "accent_block": "minecraft:deepslate_tiles",
-  "accent_every": 4,
-  "thickness": 2,
-  "height": 6,
-  "walkable": true
-}

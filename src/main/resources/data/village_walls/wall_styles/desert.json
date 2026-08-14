@@ -1,0 +1,10 @@
+{
+  "thickness": 1, "height": 4, "walkable": false, "support_every": 5,
+  "palettes": {
+    "foundation": [{"block":"minecraft:smooth_sandstone","weight":5},{"block":"minecraft:cut_sandstone","weight":1}],
+    "body": [{"block":"minecraft:sandstone","weight":5},{"block":"minecraft:cut_sandstone","weight":3},{"block":"minecraft:smooth_sandstone","weight":1}],
+    "support": [{"block":"minecraft:cut_sandstone","weight":5},{"block":"minecraft:chiseled_sandstone","weight":1}],
+    "cap": [{"block":"minecraft:smooth_sandstone","weight":4},{"block":"minecraft:cut_sandstone","weight":1}]
+  },
+  "details": [{"block":"minecraft:wall_torch","spacing":23,"salt":61,"side":"inside","vertical_offset":2}]
+}

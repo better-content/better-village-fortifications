@@ -17,6 +17,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.StructureTags;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
@@ -100,11 +101,6 @@ public class AutoVillageWallBuilder {
     }
 
     private boolean processLevel(ServerLevel level, Map<CellKey, PendingBuild> levelPending, boolean mayBuild) {
-        Optional<WallStyle> style = WallStyleRegistry.getStyle(WallStyleRegistry.defaultStyleId());
-        if (style.isEmpty()) {
-            return false;
-        }
-
         ProcessedVillages processed = ProcessedVillages.get(level);
         Iterator<Map.Entry<CellKey, PendingBuild>> iterator = levelPending.entrySet().iterator();
         while (iterator.hasNext()) {
@@ -122,6 +118,17 @@ public class AutoVillageWallBuilder {
             if (!mayBuild) {
                 entry.setValue(build);
                 continue;
+            }
+
+            Registry<Biome> biomes = level.registryAccess().registryOrThrow(Registries.BIOME);
+            ResourceLocation biomeId = biomes.getKey(level.getBiome(build.origin()).value());
+            Optional<WallStyle> style = biomeId == null
+                    ? WallStyleRegistry.getStyle(WallStyleRegistry.defaultStyleId())
+                    : WallStyleRegistry.selectForBiome(biomeId);
+            if (style.isEmpty()) {
+                VillageWalls.LOGGER.warn("No wall style is available for village at {}", build.origin());
+                iterator.remove();
+                return false;
             }
 
             Optional<ChunkPos> missingChunk = ChunkLoadTracker.firstMissingSearchChunk(

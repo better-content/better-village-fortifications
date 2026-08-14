@@ -1,8 +1,11 @@
 {
-  "primary_block": "minecraft:stone_bricks",
-  "accent_block": "minecraft:mossy_stone_bricks",
-  "accent_every": 5,
-  "thickness": 3,
-  "height": 6,
-  "walkable": true
+  "thickness": 3, "height": 6, "walkable": true, "support_every": 6,
+  "palettes": {
+    "foundation": [{"block":"minecraft:cobblestone","weight":3},{"block":"minecraft:mossy_cobblestone","weight":1}],
+    "body": [{"block":"minecraft:stone_bricks","weight":8},{"block":"minecraft:cracked_stone_bricks","weight":1},{"block":"minecraft:mossy_stone_bricks","weight":1}],
+    "support": [{"block":"minecraft:polished_andesite","weight":4},{"block":"minecraft:stone_bricks","weight":1}],
+    "cap": [{"block":"minecraft:stone_bricks","weight":5},{"block":"minecraft:mossy_stone_bricks","weight":1}],
+    "parapet": [{"block":"minecraft:stone_brick_wall","weight":5},{"block":"minecraft:mossy_stone_brick_wall","weight":1}]
+  },
+  "details": [{"block":"minecraft:wall_torch","spacing":19,"salt":73,"side":"outside","vertical_offset":3}]
 }

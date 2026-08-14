@@ -1,8 +1,0 @@
-{
-  "primary_block": "minecraft:cobblestone",
-  "accent_block": "minecraft:spruce_log",
-  "accent_every": 4,
-  "thickness": 1,
-  "height": 3,
-  "walkable": false
-}

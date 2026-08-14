@@ -1,0 +1,10 @@
+{
+  "selectors": [
+    {"style":"village_walls:snowy","priority":70,"biome_patterns":["snowy","frozen","ice_spikes","glacier","tundra"]},
+    {"style":"village_walls:desert","priority":60,"biome_patterns":["desert","badlands","dune","arid","outback"]},
+    {"style":"village_walls:savanna","priority":50,"biome_patterns":["savanna","steppe","prairie"]},
+    {"style":"village_walls:swamp","priority":40,"biome_patterns":["swamp","marsh","bayou","fen"]},
+    {"style":"village_walls:tropical","priority":30,"biome_patterns":["jungle","tropic","rainforest"]},
+    {"style":"village_walls:taiga","priority":20,"biome_patterns":["taiga","boreal","pine","redwood"]}
+  ]
+}

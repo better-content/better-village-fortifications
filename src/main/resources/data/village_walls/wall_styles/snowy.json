@@ -1,0 +1,10 @@
+{
+  "thickness": 1, "height": 4, "walkable": false, "support_every": 5,
+  "palettes": {
+    "foundation": [{"block":"minecraft:cobbled_deepslate","weight":5},{"block":"minecraft:cobblestone","weight":1}],
+    "body": [{"block":"minecraft:stone_bricks","weight":5},{"block":"minecraft:polished_andesite","weight":2},{"block":"quark:jasper_bricks","weight":2,"optional":true}],
+    "support": [{"block":"minecraft:stripped_spruce_log[axis=y]","weight":5},{"block":"minecraft:spruce_log[axis=y]","weight":1}],
+    "cap": [{"block":"minecraft:polished_andesite","weight":4},{"block":"minecraft:stone_bricks","weight":2}]
+  },
+  "details": [{"block":"minecraft:wall_torch","spacing":17,"salt":53,"side":"inside","vertical_offset":2}]
+}
