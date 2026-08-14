@@ -53,6 +53,7 @@ public class VillageWallGenerator {
     private static final int MIN_ENCLOSURE_BUFFER = 6;
     private static final int MIN_VISIBLE_WALL_HEIGHT = 3;
     private static final int MAX_VISIBLE_WALL_HEIGHT = 6;
+    private static final int MAX_UNDERWATER_WALL_DEPTH = 4;
     private static final int VINE_SPACING = 9;
     private static final int PATH_GATE_SCAN_DEPTH = 12;
     private static final int PATH_GATE_SCORE_BONUS = 100_000;
@@ -331,6 +332,9 @@ public class VillageWallGenerator {
             }
             for (int t = 0; t < style.thickness(); t++) {
                 GridPos offset = profile.rampart() ? rampartOffset(p, inside, t, style.thickness()) : offsetForThickness(p, a, b, t);
+                if (!shouldPlaceWallColumn(waterDepthAtSurface(level, offset))) {
+                    continue;
+                }
                 int columnBaseY = wallColumnBaseY(level, sampler, offset);
                 int visibleBaseY = sampler.surfaceY(offset.x(), offset.z());
                 int visualTopY = cappedWallTopY(visibleBaseY, enclosureTopY, MIN_VISIBLE_WALL_HEIGHT);
@@ -368,7 +372,7 @@ public class VillageWallGenerator {
                 clearOldWallAboveCap(level, offset, visualTopY);
                 roughenGroundBorder(level, offset, columnBaseY);
             }
-            if (shouldPlaceVines(p, i, line.size(), placeDoor)) {
+            if (shouldPlaceWallColumn(waterDepthAtSurface(level, p)) && shouldPlaceVines(p, i, line.size(), placeDoor)) {
                 placeVines(level, p, normal, terrainY + 1, cappedWallTopY(terrainY, enclosureTopY, MIN_VISIBLE_WALL_HEIGHT));
             }
         }
@@ -482,7 +486,15 @@ public class VillageWallGenerator {
             return baseY;
         }
         int oceanFloorY = level.getHeight(Heightmap.Types.OCEAN_FLOOR, pos.x(), pos.z());
-        return Math.min(baseY, oceanFloorY);
+        return underwaterColumnBaseY(baseY, oceanFloorY);
+    }
+
+    static int underwaterColumnBaseY(int surfaceY, int oceanFloorY) {
+        return Math.min(surfaceY, Math.max(oceanFloorY, surfaceY - MAX_UNDERWATER_WALL_DEPTH));
+    }
+
+    static boolean shouldPlaceWallColumn(int waterDepth) {
+        return waterDepth <= MAX_UNDERWATER_WALL_DEPTH;
     }
 
     private static int waterDepthAtSurface(ServerLevel level, GridPos pos) {
