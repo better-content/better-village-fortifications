@@ -33,15 +33,16 @@ import java.util.Optional;
 import java.util.Set;
 
 public class AutoVillageWallBuilder {
-    private static final int SEARCH_RADIUS = 96;
+    // Keep the complete footprint inside ordinary loaded view distance so walls exist on approach.
+    private static final int SEARCH_RADIUS = 64;
     private static final int BUFFER_RADIUS = 8;
     private static final int MAX_DOORS = 4;
-    private static final int BUILD_DELAY_TICKS = 20;
-    private static final int INCOMPLETE_SEARCH_RETRY_TICKS = 100;
+    private static final int BUILD_DELAY_TICKS = 1;
+    private static final int INCOMPLETE_SEARCH_RETRY_TICKS = 20;
     private static final int MAX_AUTOMATIC_BUILDS_PER_TICK = 1;
     private static final int CELL_SIZE_BITS = 4;
-    private static final int PLAYER_SCAN_INTERVAL_TICKS = 100;
-    private static final int PLAYER_SCAN_CHUNK_RADIUS = 8;
+    private static final int PLAYER_SCAN_INTERVAL_TICKS = 20;
+    private static final int PLAYER_SCAN_CHUNK_RADIUS = 12;
 
     private final VillageWallGenerator generator = new VillageWallGenerator();
     private final Map<ResourceKey<Level>, Map<CellKey, PendingBuild>> pending = new HashMap<>();
