@@ -1,6 +1,7 @@
 package com.bettercontent.villagewalls.world;
 
 import com.bettercontent.villagewalls.config.WallStyle;
+import com.bettercontent.villagewalls.config.WallStyleRegistry;
 import com.bettercontent.villagewalls.logic.DoorPlanner;
 import com.bettercontent.villagewalls.logic.GridPos;
 import com.bettercontent.villagewalls.logic.SegmentFlatness;
@@ -29,6 +30,7 @@ import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.VineBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.block.state.properties.DoorHingeSide;
@@ -137,15 +139,7 @@ public class VillageWallGenerator {
         if (!rampart) {
             return new WallProfile(requestedStyle, false);
         }
-        WallStyle rampartStyle = new WallStyle(
-                new ResourceLocation("village_walls", "rampart_stonebrick"),
-                "minecraft:stone_bricks",
-                "minecraft:mossy_stone_bricks",
-                5,
-                3,
-                MAX_VISIBLE_WALL_HEIGHT,
-                true
-        );
+        WallStyle rampartStyle = WallStyleRegistry.getStyle(WallStyleRegistry.rampartStyleId()).orElse(requestedStyle);
         return new WallProfile(rampartStyle, true);
     }
 
@@ -344,10 +338,10 @@ public class VillageWallGenerator {
                 if (hollowRampartLane) {
                     int interiorFloorY = Math.max(columnBaseY, roofY - 2);
                     for (int y = columnBaseY; y <= interiorFloorY; y++) {
-                        level.setBlock(new BlockPos(offset.x(), y, offset.z()), stoneBrickState(p, y), Block.UPDATE_ALL);
+                        level.setBlock(new BlockPos(offset.x(), y, offset.z()), wallState(style, p, i, y, columnBaseY, interiorFloorY), Block.UPDATE_ALL);
                     }
                     BlockPos interiorFloor = new BlockPos(offset.x(), interiorFloorY, offset.z());
-                    level.setBlock(interiorFloor, stoneBrickState(p, columnBaseY), Block.UPDATE_ALL);
+                    level.setBlock(interiorFloor, wallState(style, p, i, interiorFloorY, columnBaseY, interiorFloorY), Block.UPDATE_ALL);
                     rampartInteriorFloor.add(interiorFloor);
                     for (int y = interiorFloorY + 1; y < roofY; y++) {
                         level.setBlock(new BlockPos(offset.x(), y, offset.z()), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
@@ -355,25 +349,25 @@ public class VillageWallGenerator {
                 } else {
                     for (int y = columnBaseY; y <= bodyTopY; y++) {
                         BlockPos pos = new BlockPos(offset.x(), y, offset.z());
-                        level.setBlock(pos, stoneBrickState(p, y), Block.UPDATE_ALL);
+                        level.setBlock(pos, wallState(style, offset, i, y, columnBaseY, bodyTopY), Block.UPDATE_ALL);
                     }
                 }
                 if (style.walkable()) {
                     BlockPos roof = new BlockPos(offset.x(), roofY, offset.z());
-                    level.setBlock(roof, stoneBrickState(offset, roofY), Block.UPDATE_ALL);
+                    level.setBlock(roof, paletteState(style.cap(), offset, roofY, 313), Block.UPDATE_ALL);
                     if (profile.rampart()) {
                         rampartRoofLanes.get(t).add(roof);
                     }
                     if (profile.rampart() && (t == 0 || t == style.thickness() - 1)) {
                         BlockPos parapet = new BlockPos(offset.x(), visualTopY, offset.z());
-                        level.setBlock(parapet, rampartParapetState(p, i), Block.UPDATE_ALL);
+                        level.setBlock(parapet, paletteState(style.parapet(), p, visualTopY, 337), Block.UPDATE_ALL);
                     }
                 }
                 clearOldWallAboveCap(level, offset, visualTopY);
                 roughenGroundBorder(level, offset, columnBaseY);
             }
-            if (shouldPlaceWallColumn(waterDepthAtSurface(level, p)) && shouldPlaceVines(p, i, line.size(), placeDoor)) {
-                placeVines(level, p, normal, terrainY + 1, cappedWallTopY(terrainY, enclosureTopY, MIN_VISIBLE_WALL_HEIGHT));
+            if (!placeDoor && i > 2 && i < line.size() - 3 && shouldPlaceWallColumn(waterDepthAtSurface(level, p))) {
+                placeWallDetails(level, style, p, inside, i, terrainY, cappedWallTopY(terrainY, enclosureTopY, MIN_VISIBLE_WALL_HEIGHT));
             }
         }
         if (profile.rampart()) {
@@ -811,15 +805,122 @@ public class VillageWallGenerator {
     private record CampfireCandidate(GridPos gridPos, BlockPos pos, Direction facing) {
     }
 
-    private static BlockState stoneBrickState(GridPos p, int y) {
-        int value = Math.floorMod(decorativeHash(p.x(), p.z() + y, 11), 12);
-        if (value < 2) {
-            return Blocks.MOSSY_STONE_BRICKS.defaultBlockState();
+    private static BlockState wallState(WallStyle style, GridPos p, int index, int y, int baseY, int topY) {
+        if (y == baseY) {
+            return paletteState(style.foundation(), p, y, 211);
         }
-        if (value < 4) {
-            return Blocks.CRACKED_STONE_BRICKS.defaultBlockState();
+        if (y == topY) {
+            return paletteState(style.cap(), p, y, 223);
         }
-        return Blocks.STONE_BRICKS.defaultBlockState();
+        if (Math.floorMod(index, style.supportEvery()) == 0) {
+            return paletteState(style.support(), p, y, 227);
+        }
+        return paletteState(style.body(), p, y, 229);
+    }
+
+    static BlockState paletteState(WallStyle.Palette palette, GridPos p, int y, int salt) {
+        List<WallStyle.BlockChoice> available = palette.choices().stream()
+                .filter(choice -> blockExists(choice.block()))
+                .toList();
+        if (available.isEmpty()) {
+            return parseBlockState(palette.fallbackBlock()).orElse(Blocks.COBBLESTONE.defaultBlockState());
+        }
+        int totalWeight = available.stream().mapToInt(WallStyle.BlockChoice::weight).sum();
+        int selected = Math.floorMod(decorativeHash(p.x(), p.z() + y, salt), totalWeight);
+        for (WallStyle.BlockChoice choice : available) {
+            selected -= choice.weight();
+            if (selected < 0) {
+                return parseBlockState(choice.block()).orElseGet(() -> parseBlockState(palette.fallbackBlock()).orElse(Blocks.COBBLESTONE.defaultBlockState()));
+            }
+        }
+        return parseBlockState(palette.fallbackBlock()).orElse(Blocks.COBBLESTONE.defaultBlockState());
+    }
+
+    private static boolean blockExists(String specification) {
+        ResourceLocation id = ResourceLocation.tryParse(blockStateId(specification));
+        return id != null && ForgeRegistries.BLOCKS.containsKey(id);
+    }
+
+    private static Optional<BlockState> parseBlockState(String specification) {
+        ResourceLocation id = ResourceLocation.tryParse(blockStateId(specification));
+        if (id == null || !ForgeRegistries.BLOCKS.containsKey(id)) {
+            return Optional.empty();
+        }
+        BlockState state = ForgeRegistries.BLOCKS.getValue(id).defaultBlockState();
+        int open = specification.indexOf('[');
+        if (open < 0) {
+            return Optional.of(state);
+        }
+        if (!specification.endsWith("]")) {
+            return Optional.empty();
+        }
+        String values = specification.substring(open + 1, specification.length() - 1);
+        for (String assignment : values.split(",")) {
+            String[] pair = assignment.split("=", 2);
+            if (pair.length != 2) {
+                return Optional.empty();
+            }
+            Property<?> property = state.getBlock().getStateDefinition().getProperty(pair[0]);
+            if (property == null) {
+                return Optional.empty();
+            }
+            state = applyProperty(state, property, pair[1]).orElse(null);
+            if (state == null) {
+                return Optional.empty();
+            }
+        }
+        return Optional.of(state);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static Optional<BlockState> applyProperty(BlockState state, Property property, String value) {
+        return property.getValue(value).map(parsed -> state.setValue(property, (Comparable) parsed));
+    }
+
+    private static String blockStateId(String specification) {
+        int open = specification.indexOf('[');
+        return open < 0 ? specification : specification.substring(0, open);
+    }
+
+    private static void placeWallDetails(ServerLevel level, WallStyle style, GridPos wallPos, Direction inside, int index, int baseY, int topY) {
+        for (WallStyle.DetailRule detail : style.details()) {
+            if (!jitteredIntervalHit(wallPos, index, detail.spacing(), detail.salt())) {
+                continue;
+            }
+            Optional<BlockState> resolved = parseBlockState(detail.block());
+            if (resolved.isEmpty()) {
+                continue;
+            }
+            List<Direction> sides = switch (detail.side()) {
+                case INSIDE -> List.of(inside);
+                case OUTSIDE -> List.of(inside.getOpposite());
+                case BOTH -> List.of(inside, inside.getOpposite());
+            };
+            for (Direction side : sides) {
+                int y = Math.min(topY - 1, baseY + detail.verticalOffset());
+                BlockPos support = new BlockPos(wallPos.x(), y, wallPos.z());
+                BlockPos target = support.relative(side);
+                if (!level.getBlockState(target).canBeReplaced() || isWaterOrFluid(level.getBlockState(target))) {
+                    continue;
+                }
+                BlockState state = orientHorizontal(resolved.get(), side);
+                if (state.canSurvive(level, target)) {
+                    level.setBlock(target, state, Block.UPDATE_ALL);
+                }
+            }
+        }
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static BlockState orientHorizontal(BlockState state, Direction outward) {
+        if (state.getBlock() instanceof VineBlock) {
+            return state.getBlock().defaultBlockState().setValue(VineBlock.getPropertyForFace(outward.getOpposite()), true);
+        }
+        Property<?> facing = state.getBlock().getStateDefinition().getProperty("facing");
+        if (facing == null || !facing.getPossibleValues().contains(outward)) {
+            return state;
+        }
+        return state.setValue((Property) facing, outward);
     }
 
     private static int decorativeHash(int x, int z, int salt) {
@@ -903,13 +1004,6 @@ public class VillageWallGenerator {
 
     private static boolean isRampartInteriorLane(int lane, int thickness) {
         return lane == (thickness / 2);
-    }
-
-    private static BlockState rampartParapetState(GridPos p, int index) {
-        if (jitteredIntervalHit(p, index, 5, 149)) {
-            return Blocks.MOSSY_STONE_BRICK_WALL.defaultBlockState();
-        }
-        return Blocks.STONE_BRICK_WALL.defaultBlockState();
     }
 
     private static Direction directionFromDelta(int dx, int dz) {
@@ -1060,11 +1154,6 @@ public class VillageWallGenerator {
             return dx >= 0 ? Direction.SOUTH : Direction.NORTH;
         }
         return dz >= 0 ? Direction.WEST : Direction.EAST;
-    }
-
-    private static BlockState blockState(String id) {
-        Optional<Block> block = Optional.ofNullable(ForgeRegistries.BLOCKS.getValue(new ResourceLocation(id)));
-        return block.orElse(Blocks.COBBLESTONE).defaultBlockState();
     }
 
     public static List<GridPos> rasterLine(GridPos a, GridPos b) {

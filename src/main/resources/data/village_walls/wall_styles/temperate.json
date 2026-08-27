@@ -1,0 +1,13 @@
+{
+  "thickness": 1, "height": 3, "walkable": false, "support_every": 5,
+  "palettes": {
+    "foundation": [{"block":"minecraft:cobblestone","weight":5},{"block":"minecraft:mossy_cobblestone","weight":1}],
+    "body": [{"block":"minecraft:stone_bricks","weight":7},{"block":"minecraft:cracked_stone_bricks","weight":1},{"block":"quark:limestone_bricks","weight":2,"optional":true}],
+    "support": [{"block":"minecraft:stripped_oak_log[axis=y]","weight":4},{"block":"minecraft:oak_log[axis=y]","weight":1}],
+    "cap": [{"block":"minecraft:stone_bricks","weight":4},{"block":"minecraft:mossy_stone_bricks","weight":1}]
+  },
+  "details": [
+    {"block":"minecraft:wall_torch","spacing":17,"salt":41,"side":"inside","vertical_offset":2},
+    {"block":"supplementaries:sconce","spacing":23,"salt":43,"side":"outside","vertical_offset":2,"optional":true}
+  ]
+}

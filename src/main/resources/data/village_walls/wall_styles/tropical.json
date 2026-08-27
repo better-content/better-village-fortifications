@@ -1,0 +1,10 @@
+{
+  "thickness": 1, "height": 4, "walkable": false, "support_every": 4,
+  "palettes": {
+    "foundation": [{"block":"minecraft:mossy_cobblestone","weight":5},{"block":"minecraft:cobblestone","weight":1}],
+    "body": [{"block":"minecraft:mossy_stone_bricks","weight":4},{"block":"minecraft:stone_bricks","weight":3},{"block":"minecraft:cracked_stone_bricks","weight":1}],
+    "support": [{"block":"minecraft:stripped_jungle_log[axis=y]","weight":5},{"block":"minecraft:jungle_log[axis=y]","weight":1}],
+    "cap": [{"block":"minecraft:jungle_planks","weight":3},{"block":"minecraft:mossy_stone_bricks","weight":2}]
+  },
+  "details": [{"block":"minecraft:vine[north=true]","spacing":11,"salt":71,"side":"both","vertical_offset":2}]
+}

@@ -1,0 +1,10 @@
+{
+  "thickness": 1, "height": 3, "walkable": false, "support_every": 4,
+  "palettes": {
+    "foundation": [{"block":"minecraft:mossy_cobblestone","weight":5},{"block":"minecraft:cobblestone","weight":2}],
+    "body": [{"block":"minecraft:mud_bricks","weight":4},{"block":"minecraft:mossy_stone_bricks","weight":3},{"block":"minecraft:stone_bricks","weight":1}],
+    "support": [{"block":"minecraft:mangrove_log[axis=y]","weight":2},{"block":"minecraft:stripped_mangrove_log[axis=y]","weight":5}],
+    "cap": [{"block":"minecraft:mangrove_planks","weight":3},{"block":"minecraft:mossy_stone_bricks","weight":2}]
+  },
+  "details": [{"block":"minecraft:vine[north=true]","spacing":13,"salt":67,"side":"outside","vertical_offset":2}]
+}

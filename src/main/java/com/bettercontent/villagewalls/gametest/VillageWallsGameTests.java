@@ -14,6 +14,8 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.gametest.GameTestHolder;
 import net.minecraftforge.gametest.PrefixGameTestTemplate;
 
+import java.util.List;
+
 @GameTestHolder(VillageWalls.MOD_ID)
 @PrefixGameTestTemplate(false)
 @Mod.EventBusSubscriber(modid = VillageWalls.MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD)
@@ -42,12 +44,16 @@ public final class VillageWallsGameTests {
         WallStyle style = WallStyleRegistry.getStyle(WallStyleRegistry.defaultStyleId()).orElseGet(() ->
                 new WallStyle(
                         WallStyleRegistry.defaultStyleId(),
-                        "minecraft:cobblestone",
-                        "minecraft:spruce_log",
-                        4,
                         1,
                         3,
-                        false
+                        false,
+                        4,
+                        palette("minecraft:cobblestone"),
+                        palette("minecraft:cobblestone"),
+                        palette("minecraft:spruce_log"),
+                        palette("minecraft:cobblestone"),
+                        palette("minecraft:cobblestone"),
+                        List.of()
                 )
         );
 
@@ -64,5 +70,9 @@ public final class VillageWallsGameTests {
         helper.assertTrue(result.perimeterPoints() == 0, "empty test world should not produce perimeter points");
         helper.assertTrue(result.doorsPlaced() == 0, "empty test world should not place doors");
         helper.succeed();
+    }
+
+    private static WallStyle.Palette palette(String block) {
+        return new WallStyle.Palette(List.of(new WallStyle.BlockChoice(block, 1, false)));
     }
 }

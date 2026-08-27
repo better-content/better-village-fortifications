@@ -1,0 +1,10 @@
+{
+  "thickness": 1, "height": 3, "walkable": false, "support_every": 4,
+  "palettes": {
+    "foundation": [{"block":"minecraft:stone","weight":4},{"block":"minecraft:cobblestone","weight":1}],
+    "body": [{"block":"minecraft:mud_bricks","weight":5},{"block":"minecraft:terracotta","weight":2}],
+    "support": [{"block":"minecraft:stripped_acacia_log[axis=y]","weight":5},{"block":"minecraft:acacia_log[axis=y]","weight":1}],
+    "cap": [{"block":"minecraft:acacia_planks","weight":4},{"block":"minecraft:mud_bricks","weight":2}]
+  },
+  "details": [{"block":"minecraft:wall_torch","spacing":21,"salt":59,"side":"inside","vertical_offset":2}]
+}
