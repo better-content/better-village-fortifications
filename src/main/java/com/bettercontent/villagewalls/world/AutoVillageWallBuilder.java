@@ -25,9 +25,10 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.level.ChunkEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -79,21 +80,23 @@ public class AutoVillageWallBuilder {
         }
 
         int buildsThisTick = 0;
-        Iterator<Map.Entry<ResourceKey<Level>, Map<CellKey, PendingBuild>>> levelIterator = pending.entrySet().iterator();
-        while (levelIterator.hasNext()) {
-            Map.Entry<ResourceKey<Level>, Map<CellKey, PendingBuild>> levelEntry = levelIterator.next();
-            ServerLevel level = server.getLevel(levelEntry.getKey());
+        for (ResourceKey<Level> dimension : snapshotKeys(pending)) {
+            Map<CellKey, PendingBuild> levelPending = pending.get(dimension);
+            if (levelPending == null) {
+                continue;
+            }
+            ServerLevel level = server.getLevel(dimension);
             if (level == null) {
-                levelIterator.remove();
+                pending.remove(dimension, levelPending);
                 continue;
             }
 
-            boolean built = processLevel(level, levelEntry.getValue(), buildsThisTick < MAX_AUTOMATIC_BUILDS_PER_TICK);
+            boolean built = processLevel(level, levelPending, buildsThisTick < MAX_AUTOMATIC_BUILDS_PER_TICK);
             if (built) {
                 buildsThisTick++;
             }
-            if (levelEntry.getValue().isEmpty()) {
-                levelIterator.remove();
+            if (levelPending.isEmpty()) {
+                pending.remove(dimension, levelPending);
             }
             if (buildsThisTick >= MAX_AUTOMATIC_BUILDS_PER_TICK) {
                 break;
@@ -103,21 +106,22 @@ public class AutoVillageWallBuilder {
 
     private boolean processLevel(ServerLevel level, Map<CellKey, PendingBuild> levelPending, boolean mayBuild) {
         ProcessedVillages processed = ProcessedVillages.get(level);
-        Iterator<Map.Entry<CellKey, PendingBuild>> iterator = levelPending.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<CellKey, PendingBuild> entry = iterator.next();
-            PendingBuild build = entry.getValue().tickDown();
+        for (CellKey key : snapshotKeys(levelPending)) {
+            PendingBuild queued = levelPending.get(key);
+            if (queued == null) {
+                continue;
+            }
+            PendingBuild build = queued.tickDown();
+            levelPending.put(key, build);
             if (build.ticksRemaining() > 0) {
-                entry.setValue(build);
                 continue;
             }
 
-            if (processed.contains(entry.getKey())) {
-                iterator.remove();
+            if (processed.contains(key)) {
+                levelPending.remove(key);
                 continue;
             }
             if (!mayBuild) {
-                entry.setValue(build);
                 continue;
             }
 
@@ -128,7 +132,7 @@ public class AutoVillageWallBuilder {
                     : WallStyleRegistry.selectForBiome(biomeId);
             if (style.isEmpty()) {
                 VillageWalls.LOGGER.warn("No wall style is available for village at {}", build.origin());
-                iterator.remove();
+                levelPending.remove(key);
                 return false;
             }
 
@@ -140,37 +144,41 @@ public class AutoVillageWallBuilder {
             if (missingChunk.isPresent()) {
                 VillageWalls.LOGGER.debug(
                         "Deferring automatic wall for village cell {} at {}; search chunk {} is not loaded yet",
-                        entry.getKey(),
+                        key,
                         build.origin(),
                         missingChunk.get()
                 );
-                entry.setValue(build.retryAfter(INCOMPLETE_SEARCH_RETRY_TICKS));
+                levelPending.put(key, build.retryAfter(INCOMPLETE_SEARCH_RETRY_TICKS));
                 continue;
             }
 
             if (level.getRandom().nextDouble() >= VillageWallsConfig.AUTOMATIC_WALL_CHANCE.get()) {
-                VillageWalls.LOGGER.info("Skipping automatic wall for village cell {} by configured chance {}", entry.getKey(), VillageWallsConfig.AUTOMATIC_WALL_CHANCE.get());
-                processed.add(entry.getKey());
-                iterator.remove();
+                VillageWalls.LOGGER.info("Skipping automatic wall for village cell {} by configured chance {}", key, VillageWallsConfig.AUTOMATIC_WALL_CHANCE.get());
+                processed.add(key);
+                levelPending.remove(key);
                 return true;
             }
 
             VillageWallGenerator.Result result = generator.generate(level, build.origin(), SEARCH_RADIUS, BUFFER_RADIUS, style.get(), MAX_DOORS);
             if (result.status() == VillageWallGenerator.Status.INCOMPLETE_SEARCH_AREA) {
-                VillageWalls.LOGGER.debug("Deferring automatic wall for village cell {} at {}; search area became incomplete during generation", entry.getKey(), build.origin());
-                entry.setValue(build.retryAfter(INCOMPLETE_SEARCH_RETRY_TICKS));
+                VillageWalls.LOGGER.debug("Deferring automatic wall for village cell {} at {}; search area became incomplete during generation", key, build.origin());
+                levelPending.put(key, build.retryAfter(INCOMPLETE_SEARCH_RETRY_TICKS));
                 continue;
             }
             if (result.perimeterPoints() >= 4) {
-                VillageWalls.LOGGER.info("Built automatic wall for village cell {} at {} with {} perimeter points", entry.getKey(), build.origin(), result.perimeterPoints());
-                processed.add(entry.getKey());
+                VillageWalls.LOGGER.info("Built automatic wall for village cell {} at {} with {} perimeter points", key, build.origin(), result.perimeterPoints());
+                processed.add(key);
             } else {
-                VillageWalls.LOGGER.warn("Automatic wall generation found no valid footprint for village cell {} at {}; it will be retried if the village is seen again", entry.getKey(), build.origin());
+                VillageWalls.LOGGER.warn("Automatic wall generation found no valid footprint for village cell {} at {}; it will be retried if the village is seen again", key, build.origin());
             }
-            iterator.remove();
+            levelPending.remove(key);
             return true;
         }
         return false;
+    }
+
+    static <K> List<K> snapshotKeys(Map<K, ?> source) {
+        return new ArrayList<>(source.keySet());
     }
 
     private void scanAroundPlayers(MinecraftServer server) {
