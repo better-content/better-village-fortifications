@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 
 final class VillageChunkPreloader {
     enum Status { WAITING, READY, FAILED }
@@ -25,6 +26,10 @@ final class VillageChunkPreloader {
     private final Set<ChunkPos> held = new LinkedHashSet<>();
     private final Map<ChunkPos, CompletableFuture<Boolean>> pending = new LinkedHashMap<>();
     private boolean closed;
+
+    static <T> CompletableFuture<T> requestAsync(Supplier<CompletableFuture<T>> request) {
+        return CompletableFuture.supplyAsync(request).thenCompose(future -> future);
+    }
 
     VillageChunkPreloader(Loader loader) {
         this.loader = loader;

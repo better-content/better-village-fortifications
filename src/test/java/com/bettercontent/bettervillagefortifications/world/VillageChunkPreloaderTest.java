@@ -10,12 +10,26 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VillageChunkPreloaderTest {
+    @Test
+    void requestAsyncLeavesTheCallingTickThreadFree() {
+        Thread tickThread = Thread.currentThread();
+        AtomicReference<Thread> requestThread = new AtomicReference<>();
+
+        assertTrue(VillageChunkPreloader.requestAsync(() -> {
+            requestThread.set(Thread.currentThread());
+            return CompletableFuture.completedFuture(true);
+        }).join());
+
+        assertTrue(requestThread.get() != tickThread);
+    }
+
     @Test
     void limitsRequestsAndReleasesOnlyRequestedChunks() {
         FakeLoader loader = new FakeLoader();

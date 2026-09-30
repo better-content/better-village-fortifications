@@ -420,7 +420,8 @@ public class AutoVillageWallBuilder {
         public CompletableFuture<Boolean> request(ChunkPos chunk) {
             level.getChunkSource().addRegionTicket(PRELOAD_TICKET, chunk, FULL_CHUNK_TICKET_LEVEL, chunk);
             try {
-                return level.getChunkSource().getChunkFuture(chunk.x, chunk.z, ChunkStatus.FULL, true)
+                return VillageChunkPreloader.requestAsync(() ->
+                        level.getChunkSource().getChunkFuture(chunk.x, chunk.z, ChunkStatus.FULL, true))
                         .thenApply(result -> result.left().isPresent());
             } catch (RuntimeException failure) {
                 release(chunk);
