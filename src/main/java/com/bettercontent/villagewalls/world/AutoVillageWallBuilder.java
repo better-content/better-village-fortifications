@@ -14,15 +14,19 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.TicketType;
 import net.minecraft.tags.StructureTags;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.chunk.ChunkStatus;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.level.ChunkEvent;
+import net.minecraftforge.event.level.LevelEvent;
+import net.minecraftforge.event.server.ServerStoppedEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import java.util.ArrayList;
@@ -32,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 public class AutoVillageWallBuilder {
     // Keep the complete footprint inside ordinary loaded view distance so walls exist on approach.
@@ -44,6 +49,16 @@ public class AutoVillageWallBuilder {
     private static final int CELL_SIZE_BITS = 4;
     private static final int PLAYER_SCAN_INTERVAL_TICKS = 20;
     private static final int PLAYER_SCAN_CHUNK_RADIUS = 12;
+    private static final int MAX_PRELOAD_CHUNKS = 121;
+    private static final int PLACEMENT_PRELOAD_MARGIN = 16;
+    private static final int MAX_PRELOADED_STYLE_THICKNESS = 16;
+    private static final int MAX_NEW_CHUNK_REQUESTS_PER_TICK = 4;
+    private static final int MAX_OUTSTANDING_CHUNK_REQUESTS = 16;
+    private static final int MAX_ACTIVE_PRELOADS = 2;
+    private static final int PRELOAD_TIMEOUT_TICKS = 600;
+    private static final int FULL_CHUNK_TICKET_LEVEL = 33;
+    private static final TicketType<ChunkPos> PRELOAD_TICKET = TicketType.create(
+            "village_walls_preload", (left, right) -> Long.compare(left.toLong(), right.toLong()));
 
     private final VillageWallGenerator generator = new VillageWallGenerator();
     private final Map<ResourceKey<Level>, Map<CellKey, PendingBuild>> pending = new HashMap<>();
@@ -59,6 +74,20 @@ public class AutoVillageWallBuilder {
         }
 
         enqueueVillageStarts(level, event.getChunk().getPos(), "chunk_load");
+    }
+
+    @SubscribeEvent
+    public void onLevelUnload(LevelEvent.Unload event) {
+        if (event.getLevel() instanceof ServerLevel level) {
+            clearLevel(level.dimension());
+        }
+    }
+
+    @SubscribeEvent
+    public void onServerStopped(ServerStoppedEvent event) {
+        for (ResourceKey<Level> dimension : snapshotKeys(pending)) {
+            clearLevel(dimension);
+        }
     }
 
     @SubscribeEvent
@@ -80,6 +109,17 @@ public class AutoVillageWallBuilder {
         }
 
         int buildsThisTick = 0;
+        int outstanding = pending.values().stream()
+                .flatMap(builds -> builds.values().stream())
+                .mapToInt(PendingBuild::inFlight)
+                .sum();
+        long activePreloads = pending.values().stream()
+                .flatMap(builds -> builds.values().stream())
+                .filter(build -> build.preloader != null)
+                .count();
+        PreloadBudget budget = new PreloadBudget(MAX_NEW_CHUNK_REQUESTS_PER_TICK,
+                Math.max(0, MAX_OUTSTANDING_CHUNK_REQUESTS - outstanding),
+                Math.max(0, MAX_ACTIVE_PRELOADS - (int) activePreloads));
         for (ResourceKey<Level> dimension : snapshotKeys(pending)) {
             Map<CellKey, PendingBuild> levelPending = pending.get(dimension);
             if (levelPending == null) {
@@ -87,37 +127,61 @@ public class AutoVillageWallBuilder {
             }
             ServerLevel level = server.getLevel(dimension);
             if (level == null) {
-                pending.remove(dimension, levelPending);
+                clearLevel(dimension);
                 continue;
             }
 
-            boolean built = processLevel(level, levelPending, buildsThisTick < MAX_AUTOMATIC_BUILDS_PER_TICK);
+            boolean built = processLevel(level, levelPending, buildsThisTick < MAX_AUTOMATIC_BUILDS_PER_TICK, budget);
             if (built) {
                 buildsThisTick++;
             }
             if (levelPending.isEmpty()) {
                 pending.remove(dimension, levelPending);
             }
-            if (buildsThisTick >= MAX_AUTOMATIC_BUILDS_PER_TICK) {
-                break;
-            }
         }
     }
 
-    private boolean processLevel(ServerLevel level, Map<CellKey, PendingBuild> levelPending, boolean mayBuild) {
+    private boolean processLevel(ServerLevel level, Map<CellKey, PendingBuild> levelPending, boolean mayBuild, PreloadBudget budget) {
         ProcessedVillages processed = ProcessedVillages.get(level);
         for (CellKey key : snapshotKeys(levelPending)) {
-            PendingBuild queued = levelPending.get(key);
-            if (queued == null) {
+            PendingBuild build = levelPending.get(key);
+            if (build == null) {
                 continue;
             }
-            PendingBuild build = queued.tickDown();
-            levelPending.put(key, build);
-            if (build.ticksRemaining() > 0) {
+            if (build.ticksRemaining-- > 0) {
                 continue;
             }
 
             if (processed.contains(key)) {
+                build.close();
+                levelPending.remove(key);
+                continue;
+            }
+            if (!playerNearVillage(level, build.origin)) {
+                build.resetPreload();
+                continue;
+            }
+
+            if (!build.chanceRolled && level.getRandom().nextDouble() >= VillageWallsConfig.AUTOMATIC_WALL_CHANCE.get()) {
+                VillageWalls.LOGGER.info("Skipping automatic wall for village cell {} by configured chance {}", key, VillageWallsConfig.AUTOMATIC_WALL_CHANCE.get());
+                processed.add(key);
+                levelPending.remove(key);
+                continue;
+            }
+            build.chanceRolled = true;
+
+            if (!build.preloadDisabled && !advancePreload(level, build, budget)) {
+                if (build.noStyle) {
+                    levelPending.remove(key);
+                }
+                continue;
+            }
+            if (build.preloadDisabled && ChunkLoadTracker.firstMissingSearchChunk(
+                    build.origin, SEARCH_RADIUS, level.getChunkSource()::hasChunk).isPresent()) {
+                build.ticksRemaining = INCOMPLETE_SEARCH_RETRY_TICKS;
+                continue;
+            }
+            if (build.style == null && !resolveStyle(level, build)) {
                 levelPending.remove(key);
                 continue;
             }
@@ -125,56 +189,120 @@ public class AutoVillageWallBuilder {
                 continue;
             }
 
-            Registry<Biome> biomes = level.registryAccess().registryOrThrow(Registries.BIOME);
-            ResourceLocation biomeId = biomes.getKey(level.getBiome(build.origin()).value());
-            Optional<WallStyle> style = biomeId == null
-                    ? WallStyleRegistry.getStyle(WallStyleRegistry.defaultStyleId())
-                    : WallStyleRegistry.selectForBiome(biomeId);
-            if (style.isEmpty()) {
-                VillageWalls.LOGGER.warn("No wall style is available for village at {}", build.origin());
-                levelPending.remove(key);
-                return false;
+            VillageWallGenerator.Result result;
+            try {
+                result = build.preparation == null
+                        ? generator.generate(level, build.origin, SEARCH_RADIUS, BUFFER_RADIUS, build.style, MAX_DOORS)
+                        : generator.generate(level, build.preparation, build.origin, SEARCH_RADIUS, build.style, MAX_DOORS);
+            } catch (RuntimeException failure) {
+                build.close();
+                throw failure;
             }
-
-            Optional<ChunkPos> missingChunk = ChunkLoadTracker.firstMissingSearchChunk(
-                    build.origin(),
-                    SEARCH_RADIUS,
-                    level.getChunkSource()::hasChunk
-            );
-            if (missingChunk.isPresent()) {
-                VillageWalls.LOGGER.debug(
-                        "Deferring automatic wall for village cell {} at {}; search chunk {} is not loaded yet",
-                        key,
-                        build.origin(),
-                        missingChunk.get()
-                );
-                levelPending.put(key, build.retryAfter(INCOMPLETE_SEARCH_RETRY_TICKS));
-                continue;
-            }
-
-            if (level.getRandom().nextDouble() >= VillageWallsConfig.AUTOMATIC_WALL_CHANCE.get()) {
-                VillageWalls.LOGGER.info("Skipping automatic wall for village cell {} by configured chance {}", key, VillageWallsConfig.AUTOMATIC_WALL_CHANCE.get());
-                processed.add(key);
-                levelPending.remove(key);
-                return true;
-            }
-
-            VillageWallGenerator.Result result = generator.generate(level, build.origin(), SEARCH_RADIUS, BUFFER_RADIUS, style.get(), MAX_DOORS);
             if (result.status() == VillageWallGenerator.Status.INCOMPLETE_SEARCH_AREA) {
-                VillageWalls.LOGGER.debug("Deferring automatic wall for village cell {} at {}; search area became incomplete during generation", key, build.origin());
-                levelPending.put(key, build.retryAfter(INCOMPLETE_SEARCH_RETRY_TICKS));
+                build.resetPreload();
+                build.ticksRemaining = INCOMPLETE_SEARCH_RETRY_TICKS;
                 continue;
             }
             if (result.perimeterPoints() >= 4) {
-                VillageWalls.LOGGER.info("Built automatic wall for village cell {} at {} with {} perimeter points", key, build.origin(), result.perimeterPoints());
+                VillageWalls.LOGGER.info("Built automatic wall for village cell {} at {} with {} perimeter points", key, build.origin, result.perimeterPoints());
                 processed.add(key);
             } else {
-                VillageWalls.LOGGER.warn("Automatic wall generation found no valid footprint for village cell {} at {}; it will be retried if the village is seen again", key, build.origin());
+                VillageWalls.LOGGER.warn("Automatic wall generation found no valid footprint for village cell {} at {}; it will be retried if the village is seen again", key, build.origin);
             }
+            build.close();
             levelPending.remove(key);
             return true;
         }
         return false;
+    }
+
+    private boolean advancePreload(ServerLevel level, PendingBuild build, PreloadBudget budget) {
+        if (build.preloader == null) {
+            if (budget.activeSlots <= 0) {
+                return false;
+            }
+            budget.activeSlots--;
+            build.preloader = new VillageChunkPreloader(new LevelChunkLoader(level));
+            build.preloader.addTargets(ChunkLoadTracker.searchChunks(build.origin, SEARCH_RADIUS), MAX_PRELOAD_CHUNKS);
+        }
+        if (++build.preloadTicks > PRELOAD_TIMEOUT_TICKS) {
+            VillageWalls.LOGGER.warn("Village wall preload timed out at {}; using loaded chunks", build.origin);
+            build.disablePreload();
+            return false;
+        }
+
+        VillageChunkPreloader.TickResult progress = build.preloader.tick(budget.requests, budget.outstanding);
+        budget.consume(progress.issued());
+        if (progress.status() == VillageChunkPreloader.Status.FAILED) {
+            VillageWalls.LOGGER.warn("Village wall preload failed at {}; using loaded chunks", build.origin);
+            build.disablePreload();
+            return false;
+        }
+        if (progress.status() != VillageChunkPreloader.Status.READY) {
+            return false;
+        }
+
+        if (build.style == null && !resolveStyle(level, build)) {
+            build.resetPreload();
+            return false;
+        }
+        if (build.preparation == null) {
+            build.preparation = generator.prepare(level, build.origin, SEARCH_RADIUS, BUFFER_RADIUS);
+            if (build.preparation.status() == VillageWallGenerator.Status.INCOMPLETE_SEARCH_AREA) {
+                build.resetPreload();
+                build.ticksRemaining = INCOMPLETE_SEARCH_RETRY_TICKS;
+                return false;
+            }
+            if (build.style.thickness() > MAX_PRELOADED_STYLE_THICKNESS) {
+                VillageWalls.LOGGER.debug("Village wall at {} uses a style too wide for bounded preloading", build.origin);
+                build.disablePreload();
+                return false;
+            }
+            if (!build.preloader.addTargets(generator.placementChunks(build.preparation,
+                    PLACEMENT_PRELOAD_MARGIN + build.style.thickness()), MAX_PRELOAD_CHUNKS)) {
+                VillageWalls.LOGGER.debug("Village wall at {} exceeds the bounded preload area; using loaded chunks", build.origin);
+                build.disablePreload();
+                return false;
+            }
+        }
+        progress = build.preloader.tick(budget.requests, budget.outstanding);
+        budget.consume(progress.issued());
+        if (progress.status() == VillageChunkPreloader.Status.FAILED) {
+            build.disablePreload();
+            return false;
+        }
+        return progress.status() == VillageChunkPreloader.Status.READY;
+    }
+
+    private static boolean resolveStyle(ServerLevel level, PendingBuild build) {
+        Registry<Biome> biomes = level.registryAccess().registryOrThrow(Registries.BIOME);
+        ResourceLocation biomeId = biomes.getKey(level.getBiome(build.origin).value());
+        Optional<WallStyle> style = biomeId == null
+                ? WallStyleRegistry.getStyle(WallStyleRegistry.defaultStyleId())
+                : WallStyleRegistry.selectForBiome(biomeId);
+        if (style.isEmpty()) {
+            VillageWalls.LOGGER.warn("No wall style is available for village at {}", build.origin);
+            build.noStyle = true;
+            return false;
+        }
+        build.style = style.get();
+        return true;
+    }
+
+    private static boolean playerNearVillage(ServerLevel level, BlockPos origin) {
+        ChunkPos village = new ChunkPos(origin);
+        return level.players().stream().anyMatch(player -> {
+            ChunkPos nearby = player.chunkPosition();
+            return Math.abs(nearby.x - village.x) <= PLAYER_SCAN_CHUNK_RADIUS
+                    && Math.abs(nearby.z - village.z) <= PLAYER_SCAN_CHUNK_RADIUS;
+        });
+    }
+
+    private void clearLevel(ResourceKey<Level> dimension) {
+        Map<CellKey, PendingBuild> removed = pending.remove(dimension);
+        if (removed != null) {
+            removed.values().forEach(PendingBuild::close);
+        }
     }
 
     static <K> List<K> snapshotKeys(Map<K, ?> source) {
@@ -205,10 +333,13 @@ public class AutoVillageWallBuilder {
                 .filter(StructureStart::isValid)
                 .forEach(start -> {
                     BlockPos origin = start.getBoundingBox().getCenter();
+                    if (!playerNearVillage(level, origin)) {
+                        return;
+                    }
                     CellKey key = CellKey.from(origin);
                     if (!processed.contains(key) && !levelPending.containsKey(key)) {
                         VillageWalls.LOGGER.info("Queued automatic wall for village cell {} at {} from {}", key, origin, source);
-                        levelPending.put(key, new PendingBuild(origin, BUILD_DELAY_TICKS));
+                        levelPending.put(key, new PendingBuild(origin));
                     }
                 });
 
@@ -217,13 +348,89 @@ public class AutoVillageWallBuilder {
         }
     }
 
-    private record PendingBuild(BlockPos origin, int ticksRemaining) {
-        PendingBuild tickDown() {
-            return new PendingBuild(origin, ticksRemaining - 1);
+    private static class PendingBuild {
+        final BlockPos origin;
+        int ticksRemaining = BUILD_DELAY_TICKS;
+        int preloadTicks;
+        boolean preloadDisabled;
+        boolean chanceRolled;
+        boolean noStyle;
+        WallStyle style;
+        VillageWallGenerator.Preparation preparation;
+        VillageChunkPreloader preloader;
+
+        PendingBuild(BlockPos origin) {
+            this.origin = origin;
         }
 
-        PendingBuild retryAfter(int ticks) {
-            return new PendingBuild(origin, ticks);
+        int inFlight() {
+            return preloader == null ? 0 : preloader.inFlight();
+        }
+
+        void resetPreload() {
+            close();
+            preparation = null;
+            preloadTicks = 0;
+        }
+
+        void disablePreload() {
+            resetPreload();
+            preloadDisabled = true;
+            ticksRemaining = INCOMPLETE_SEARCH_RETRY_TICKS;
+        }
+
+        void close() {
+            if (preloader != null) {
+                preloader.close();
+                preloader = null;
+            }
+        }
+    }
+
+    private static class PreloadBudget {
+        int requests;
+        int outstanding;
+        int activeSlots;
+
+        PreloadBudget(int requests, int outstanding, int activeSlots) {
+            this.requests = requests;
+            this.outstanding = outstanding;
+            this.activeSlots = activeSlots;
+        }
+
+        void consume(int issued) {
+            requests -= issued;
+            outstanding -= issued;
+        }
+    }
+
+    private static class LevelChunkLoader implements VillageChunkPreloader.Loader {
+        private final ServerLevel level;
+
+        LevelChunkLoader(ServerLevel level) {
+            this.level = level;
+        }
+
+        @Override
+        public boolean hasChunk(ChunkPos chunk) {
+            return level.getChunkSource().hasChunk(chunk.x, chunk.z);
+        }
+
+        @Override
+        public CompletableFuture<Boolean> request(ChunkPos chunk) {
+            level.getChunkSource().addRegionTicket(PRELOAD_TICKET, chunk, FULL_CHUNK_TICKET_LEVEL, chunk);
+            try {
+                return level.getChunkSource().getChunkFuture(chunk.x, chunk.z, ChunkStatus.FULL, true)
+                        .thenApply(result -> result.left().isPresent());
+            } catch (RuntimeException failure) {
+                release(chunk);
+                throw failure;
+            }
+        }
+
+        @Override
+        public void release(ChunkPos chunk) {
+            level.getChunkSource().removeRegionTicket(PRELOAD_TICKET, chunk, FULL_CHUNK_TICKET_LEVEL, chunk);
         }
     }
 

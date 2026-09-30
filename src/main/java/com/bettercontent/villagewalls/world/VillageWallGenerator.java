@@ -87,27 +87,56 @@ public class VillageWallGenerator {
     }
 
     public Result generate(ServerLevel level, BlockPos origin, int searchRadius, int bufferRadius, WallStyle style, int maxDoors) {
+        return generate(level, prepare(level, origin, searchRadius, bufferRadius), origin, searchRadius, style, maxDoors);
+    }
+
+    Preparation prepare(ServerLevel level, BlockPos origin, int searchRadius, int bufferRadius) {
         Optional<ChunkPos> missingChunk = ChunkLoadTracker.firstMissingSearchChunk(
                 origin,
                 searchRadius,
                 level.getChunkSource()::hasChunk
         );
         if (missingChunk.isPresent()) {
-            return new Result(Status.INCOMPLETE_SEARCH_AREA, 0, 0, 0);
+            return new Preparation(Status.INCOMPLETE_SEARCH_AREA, Set.of(), List.of());
         }
 
         VillageFootprint footprint = collectFootprint(level, origin, searchRadius);
         if (footprint.points().isEmpty()) {
-            return new Result(Status.NO_FOOTPRINT, 0, 0, 0);
+            return new Preparation(Status.NO_FOOTPRINT, Set.of(), List.of());
         }
 
         List<GridPos> perimeter = VillageOutlineSolver.traceCleanRing(footprint.points(), Math.max(bufferRadius, MIN_ENCLOSURE_BUFFER));
         if (perimeter.size() < 4) {
-            return new Result(Status.OUTLINE_TOO_SMALL, footprint.points().size(), perimeter.size(), 0);
+            return new Preparation(Status.OUTLINE_TOO_SMALL, footprint.points(), perimeter);
         }
+        return new Preparation(Status.BUILT, footprint.points(), perimeter);
+    }
+
+    Set<ChunkPos> placementChunks(Preparation preparation, int margin) {
+        Set<ChunkPos> chunks = new HashSet<>();
+        for (GridPos point : preparation.perimeter()) {
+            int minX = (point.x() - margin) >> 4;
+            int maxX = (point.x() + margin) >> 4;
+            int minZ = (point.z() - margin) >> 4;
+            int maxZ = (point.z() + margin) >> 4;
+            for (int x = minX; x <= maxX; x++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    chunks.add(new ChunkPos(x, z));
+                }
+            }
+        }
+        return chunks;
+    }
+
+    Result generate(ServerLevel level, Preparation preparation, BlockPos origin, int searchRadius, WallStyle style, int maxDoors) {
+        if (preparation.status() != Status.BUILT) {
+            return new Result(preparation.status(), preparation.footprint().size(), preparation.perimeter().size(), 0);
+        }
+        Set<GridPos> points = preparation.footprint();
+        List<GridPos> perimeter = preparation.perimeter();
 
         boolean inhabited = hasVillagers(level, origin, searchRadius);
-        WallProfile profile = chooseWallProfile(footprint.points(), perimeter, style);
+        WallProfile profile = chooseWallProfile(points, perimeter, style);
         TerrainSampler sampler = snapshotTerrain(level, perimeter, profile.style().thickness());
         int enclosureTopY = enclosureTopY(perimeter, sampler, profile.style().height());
         List<SegmentFlatness> segmentFlatness = scoreSegments(perimeter, sampler, level);
@@ -121,12 +150,15 @@ public class VillageWallGenerator {
             if (placeDoor) {
                 doorCount++;
             }
-            placeSegment(level, a, b, sampler, profile, placeDoor, enclosureTopY, footprint.points(), i, inhabited);
+            placeSegment(level, a, b, sampler, profile, placeDoor, enclosureTopY, points, i, inhabited);
         }
         if (inhabited) {
-            placeLightingCampfires(level, perimeter, footprint.points(), profile);
+            placeLightingCampfires(level, perimeter, points, profile);
         }
-        return new Result(Status.BUILT, footprint.points().size(), perimeter.size(), doorCount * 2);
+        return new Result(Status.BUILT, points.size(), perimeter.size(), doorCount * 2);
+    }
+
+    record Preparation(Status status, Set<GridPos> footprint, List<GridPos> perimeter) {
     }
 
     private static boolean hasVillagers(ServerLevel level, BlockPos origin, int searchRadius) {

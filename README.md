@@ -9,7 +9,7 @@ Village Walls is a server-side mod that detects a village footprint from generat
 - Deterministic foundations, mixed wall courses, supports, caps, weathering, and sparse attachments.
 - Automatic biome-family selection through datapack selectors under `data/village_walls/wall_style_selectors`.
 - Optional modded palette entries that disappear safely when their blocks are unavailable.
-- Automatic wall generation when village structure chunks load on the server.
+- Automatic wall generation when village structure chunks load near a player. Missing village and wall-placement chunks are preloaded in a bounded queue before building, then released.
 - Automatic flatness scoring of wall segments.
 - One primary adjacent double-door gate on the flattest segment.
 - Additional gates on other equally flat segments (up to a configured cap).

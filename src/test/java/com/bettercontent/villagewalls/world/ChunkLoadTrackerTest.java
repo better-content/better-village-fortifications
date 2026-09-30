@@ -67,6 +67,14 @@ class ChunkLoadTrackerTest {
         assertTrue(ready);
     }
 
+    @Test
+    void automaticSearchRadiusCoversNineByNineChunks() {
+        var chunks = ChunkLoadTracker.searchChunks(new BlockPos(15, 64, -1), 64);
+        assertEquals(81, chunks.size());
+        assertTrue(chunks.contains(new ChunkPos(-4, -5)));
+        assertTrue(chunks.contains(new ChunkPos(4, 3)));
+    }
+
     private static Set<ChunkPos> loadedRectangle(int minX, int minZ, int maxX, int maxZ) {
         Set<ChunkPos> loaded = new HashSet<>();
         for (int x = minX; x <= maxX; x++) {
