@@ -2,25 +2,25 @@ modLoader="javafml"
 loaderVersion="[47,)"
 license="AGPL-3.0-or-later"
 [[mods]]
-modId="village_walls"
+modId="better_village_fortifications"
 version="${mod_version}"
 displayName="${mod_name}"
-displayURL="https://github.com/better-content/village-walls"
-issueTrackerURL="https://github.com/better-content/village-walls/issues"
+displayURL="https://github.com/better-content/better-village-fortifications"
+issueTrackerURL="https://github.com/better-content/better-village-fortifications/issues"
 credits="Community contributors"
 authors="VillageWalls Contributors"
 description='''
 Data-driven village wall generator for Minecraft Forge 1.20.1.
 '''
 
-[[dependencies.village_walls]]
+[[dependencies.better_village_fortifications]]
 modId="forge"
 mandatory=true
 versionRange="[47,)"
 ordering="NONE"
 side="BOTH"
 
-[[dependencies.village_walls]]
+[[dependencies.better_village_fortifications]]
 modId="minecraft"
 mandatory=true
 versionRange="[1.20.1]"

@@ -2,9 +2,9 @@
 
 ## Project identity
 
-- Repository and artifact: `village-walls`
-- Mod ID and resource namespace: `village_walls`
-- Base package: `com.bettercontent.villagewalls`
+- Repository and artifact: `better-village-fortifications`
+- Mod ID and resource namespace: `better_village_fortifications`
+- Base package: `com.bettercontent.bettervillagefortifications`
 - Java: 17
 - Forge: 1.20.1-47.4.13
 

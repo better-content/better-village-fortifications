@@ -1,13 +1,13 @@
-# Village Walls (Forge 1.20.1)
+# Better Village Fortifications (Forge 1.20.1)
 
 Village Walls is a server-side mod that detects a village footprint from generated village structures or village POIs, expands it by a configurable buffer, and builds enclosing walls from data-driven styles. It then finds the flattest wall segments and places adjacent double-door gates there.
 
 ## Features
 
 - Village perimeter tracing with configurable buffer radius.
-- Data-driven regional wall styles loaded from datapack JSON under `data/village_walls/wall_styles`.
+- Data-driven regional wall styles loaded from datapack JSON under `data/better_village_fortifications/wall_styles`.
 - Deterministic foundations, mixed wall courses, supports, caps, weathering, and sparse attachments.
-- Automatic biome-family selection through datapack selectors under `data/village_walls/wall_style_selectors`.
+- Automatic biome-family selection through datapack selectors under `data/better_village_fortifications/wall_style_selectors`.
 - Optional modded palette entries that disappear safely when their blocks are unavailable.
 - Automatic wall generation when village structure chunks load near a player. Missing village and wall-placement chunks are preloaded in a bounded queue before building, then released.
 - Automatic flatness scoring of wall segments.
@@ -20,13 +20,13 @@ Village Walls is a server-side mod that detects a village footprint from generat
 
 Walls are built automatically with the default style when village structure chunks load. Use the command for manual builds, alternate styles, or custom radii:
 
-- `/village_walls styles`
-- `/village_walls build <style> <searchRadius> <buffer> <maxDoors>`
+- `/better_village_fortifications styles`
+- `/better_village_fortifications build <style> <searchRadius> <buffer> <maxDoors>`
 
 Example:
 
 ```text
-/village_walls build village_walls:taiga 128 6 8
+/better_village_fortifications build better_village_fortifications:taiga 128 6 8
 ```
 
 ## Wall Style JSON Schema
@@ -77,7 +77,7 @@ Selector files contain an ordered `selectors` array. Higher priorities win; each
 {
   "selectors": [
     {
-      "style": "village_walls:snowy",
+      "style": "better_village_fortifications:snowy",
       "priority": 70,
       "biome_patterns": ["snowy", "frozen", "tundra"]
     }
@@ -85,7 +85,7 @@ Selector files contain an ordered `selectors` array. Higher priorities win; each
 }
 ```
 
-Selectors affect automatic generation only. A style explicitly supplied to `/village_walls build` is always used as requested.
+Selectors affect automatic generation only. A style explicitly supplied to `/better_village_fortifications build` is always used as requested.
 
 ## Build and Test
 
@@ -102,9 +102,9 @@ For modpack and mod discussion, playtest feedback, and bug reports, join the [Be
 
 ## Canonical identity
 
-- Repository and release artifact: `village-walls`
-- Mod ID and resource namespace: `village_walls`
-- Java package: `com.bettercontent.villagewalls`
+- Repository and release artifact: `better-village-fortifications`
+- Mod ID and resource namespace: `better_village_fortifications`
+- Java package: `com.bettercontent.bettervillagefortifications`
 - Validation: `./gradlew verifyFull`
 
 This normalization is a clean break. Worlds, configuration files, and integrations created for earlier identities are not migrated or aliased.
