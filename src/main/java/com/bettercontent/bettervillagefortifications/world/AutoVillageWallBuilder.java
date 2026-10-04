@@ -185,15 +185,26 @@ public class AutoVillageWallBuilder {
                 levelPending.remove(key);
                 continue;
             }
+            if (build.preparation == null) {
+                build.preparation = generator.prepare(level, build.origin, SEARCH_RADIUS, BUFFER_RADIUS);
+                if (build.preparation.status() == VillageWallGenerator.Status.INCOMPLETE_SEARCH_AREA) {
+                    build.ticksRemaining = INCOMPLETE_SEARCH_RETRY_TICKS;
+                    continue;
+                }
+            }
+            if (build.preparation.status() == VillageWallGenerator.Status.BUILT
+                    && !placementAreaLoaded(level, generator.placementChunks(build.preparation,
+                    PLACEMENT_PRELOAD_MARGIN + build.style.thickness()))) {
+                build.ticksRemaining = INCOMPLETE_SEARCH_RETRY_TICKS;
+                continue;
+            }
             if (!mayBuild) {
                 continue;
             }
 
             VillageWallGenerator.Result result;
             try {
-                result = build.preparation == null
-                        ? generator.generate(level, build.origin, SEARCH_RADIUS, BUFFER_RADIUS, build.style, MAX_DOORS)
-                        : generator.generate(level, build.preparation, build.origin, SEARCH_RADIUS, build.style, MAX_DOORS);
+                result = generator.generate(level, build.preparation, build.origin, SEARCH_RADIUS, build.style, MAX_DOORS);
             } catch (RuntimeException failure) {
                 build.close();
                 throw failure;
@@ -214,6 +225,10 @@ public class AutoVillageWallBuilder {
             return true;
         }
         return false;
+    }
+
+    private static boolean placementAreaLoaded(ServerLevel level, Set<ChunkPos> chunks) {
+        return chunks.stream().allMatch(chunk -> level.getChunkSource().hasChunk(chunk.x, chunk.z));
     }
 
     private boolean advancePreload(ServerLevel level, PendingBuild build, PreloadBudget budget) {

@@ -114,14 +114,17 @@ public class VillageWallGenerator {
 
     Set<ChunkPos> placementChunks(Preparation preparation, int margin) {
         Set<ChunkPos> chunks = new HashSet<>();
-        for (GridPos point : preparation.perimeter()) {
-            int minX = (point.x() - margin) >> 4;
-            int maxX = (point.x() + margin) >> 4;
-            int minZ = (point.z() - margin) >> 4;
-            int maxZ = (point.z() + margin) >> 4;
-            for (int x = minX; x <= maxX; x++) {
-                for (int z = minZ; z <= maxZ; z++) {
-                    chunks.add(new ChunkPos(x, z));
+        List<GridPos> perimeter = preparation.perimeter();
+        for (int i = 0; i < perimeter.size(); i++) {
+            for (GridPos point : rasterLine(perimeter.get(i), perimeter.get((i + 1) % perimeter.size()))) {
+                int minX = (point.x() - margin) >> 4;
+                int maxX = (point.x() + margin) >> 4;
+                int minZ = (point.z() - margin) >> 4;
+                int maxZ = (point.z() + margin) >> 4;
+                for (int x = minX; x <= maxX; x++) {
+                    for (int z = minZ; z <= maxZ; z++) {
+                        chunks.add(new ChunkPos(x, z));
+                    }
                 }
             }
         }
