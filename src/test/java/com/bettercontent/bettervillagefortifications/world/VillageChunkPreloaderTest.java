@@ -18,6 +18,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VillageChunkPreloaderTest {
     @Test
+    void preloadRegionTicketDoesNotExpandBeyondRequestedChunk() {
+        // Pinned Forge 47.4.13 subtracts this radius from the FULL ticket level (33).
+        assertEquals(0, AutoVillageWallBuilder.FULL_CHUNK_TICKET_RADIUS);
+    }
+
+    @Test
     void requestAsyncLeavesTheCallingTickThreadFree() {
         Thread tickThread = Thread.currentThread();
         AtomicReference<Thread> requestThread = new AtomicReference<>();

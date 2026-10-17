@@ -56,7 +56,8 @@ public class AutoVillageWallBuilder {
     private static final int MAX_OUTSTANDING_CHUNK_REQUESTS = 16;
     private static final int MAX_ACTIVE_PRELOADS = 2;
     private static final int PRELOAD_TIMEOUT_TICKS = 600;
-    private static final int FULL_CHUNK_TICKET_LEVEL = 33;
+    // addRegionTicket takes a radius, not a ticket level. Radius zero holds only the requested FULL chunk.
+    static final int FULL_CHUNK_TICKET_RADIUS = 0;
     private static final TicketType<ChunkPos> PRELOAD_TICKET = TicketType.create(
             "better_village_fortifications_preload", (left, right) -> Long.compare(left.toLong(), right.toLong()));
 
@@ -433,7 +434,7 @@ public class AutoVillageWallBuilder {
 
         @Override
         public CompletableFuture<Boolean> request(ChunkPos chunk) {
-            level.getChunkSource().addRegionTicket(PRELOAD_TICKET, chunk, FULL_CHUNK_TICKET_LEVEL, chunk);
+            level.getChunkSource().addRegionTicket(PRELOAD_TICKET, chunk, FULL_CHUNK_TICKET_RADIUS, chunk);
             try {
                 return VillageChunkPreloader.requestAsync(() ->
                         level.getChunkSource().getChunkFuture(chunk.x, chunk.z, ChunkStatus.FULL, true))
@@ -446,7 +447,7 @@ public class AutoVillageWallBuilder {
 
         @Override
         public void release(ChunkPos chunk) {
-            level.getChunkSource().removeRegionTicket(PRELOAD_TICKET, chunk, FULL_CHUNK_TICKET_LEVEL, chunk);
+            level.getChunkSource().removeRegionTicket(PRELOAD_TICKET, chunk, FULL_CHUNK_TICKET_RADIUS, chunk);
         }
     }
 
