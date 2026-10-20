@@ -1,5 +1,16 @@
 # Better Village Fortifications (Forge 1.20.1)
 
+## Playtest logging
+
+`bc.playtest.better_village_fortifications.walls` observes queue/chance/generation outcomes and
+loaded-only degradation after preload timeout/failure. No-footprint is an ordinary deferred
+outcome, not a warning. Existing exceptional preload failures remain visible outside detail
+suppression. No extra chunk request or per-block/tick stream is introduced. DEBUG/TRACE share
+120/minute (burst 20), 256 keys and 2,048-character records, with 30-second summaries. Startup INFO
+reports effective common-config automatic enablement and loaded version/mode/limits; unavailable
+source identity is `UNKNOWN`. Stop/disconnect clears transient keys without rearming process
+allowances. Pure emitter/contracts supplement native generation/preloader gates.
+
 ## Scope and authority
 
 This repository owns its mod-specific behavior and authoring inputs. Read [local instructions](AGENTS.md)
