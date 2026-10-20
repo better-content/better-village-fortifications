@@ -278,13 +278,13 @@ public class AutoVillageWallBuilder {
                 return false;
             }
             if (build.style.thickness() > MAX_PRELOADED_STYLE_THICKNESS) {
-                VillageWalls.LOGGER.debug("Village wall at {} uses a style too wide for bounded preloading", build.origin);
+                outcome("degraded", "style_exceeds_preload_width");
                 build.disablePreload();
                 return false;
             }
             if (!build.preloader.addTargets(generator.placementChunks(build.preparation,
                     PLACEMENT_PRELOAD_MARGIN + build.style.thickness()), MAX_PRELOAD_CHUNKS)) {
-                VillageWalls.LOGGER.debug("Village wall at {} exceeds the bounded preload area; using loaded chunks", build.origin);
+                outcome("degraded", "preload_area_limit");
                 build.disablePreload();
                 return false;
             }

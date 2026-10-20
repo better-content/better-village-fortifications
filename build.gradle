@@ -191,3 +191,5 @@ tasks.register('verifyFull') {
     dependsOn tasks.named('verifyFast')
     dependsOn tasks.named('headlessGameTest')
 }
+
+apply from: 'gradle/native-gametest-fixture.gradle'

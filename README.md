@@ -1,5 +1,12 @@
 # Better Village Fortifications (Forge 1.20.1)
 
+## Native fixture verification
+
+`verifyFast` includes absent-settings/preserve-existing and strict ERROR/FATAL guard regressions.
+Before source GameTest bootstrap, the actual working directory receives a defaults-only
+`server.properties` only if absent; existing settings are never replaced. The full native gate
+rejects ERROR/FATAL diagnostics even when required tests and the process report success.
+
 ## Playtest logging
 
 `bc.playtest.better_village_fortifications.walls` observes queue/chance/generation outcomes and
