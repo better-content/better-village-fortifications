@@ -164,7 +164,7 @@ public class AutoVillageWallBuilder {
             }
 
             if (!build.chanceRolled && level.getRandom().nextDouble() >= VillageWallsConfig.AUTOMATIC_WALL_CHANCE.get()) {
-                outcome("skipped", "configured_chance");
+                outcome(level, build.origin, "skipped", "configured_chance");
                 processed.add(key);
                 levelPending.remove(key);
                 continue;
@@ -217,11 +217,11 @@ public class AutoVillageWallBuilder {
             }
             if (result.perimeterPoints() >= 4) {
                 if (com.bettercontent.bettervillagefortifications.PlaytestDiagnostics.LOG.enabled("walls"))
-                    com.bettercontent.bettervillagefortifications.diagnostics.FeatureTelemetry.generation(com.bettercontent.bettervillagefortifications.PlaytestDiagnostics.LOG, true);
+                    com.bettercontent.bettervillagefortifications.diagnostics.FeatureTelemetry.generation(com.bettercontent.bettervillagefortifications.PlaytestDiagnostics.LOG, context(level, build.origin), true);
                 processed.add(key);
             } else {
                 if (com.bettercontent.bettervillagefortifications.PlaytestDiagnostics.LOG.enabled("walls"))
-                    com.bettercontent.bettervillagefortifications.diagnostics.FeatureTelemetry.generation(com.bettercontent.bettervillagefortifications.PlaytestDiagnostics.LOG, false);
+                    com.bettercontent.bettervillagefortifications.diagnostics.FeatureTelemetry.generation(com.bettercontent.bettervillagefortifications.PlaytestDiagnostics.LOG, context(level, build.origin), false);
             }
             build.close();
             levelPending.remove(key);
@@ -230,9 +230,16 @@ public class AutoVillageWallBuilder {
         return false;
     }
 
-    private static void outcome(String result, String reason) {
+    private static com.bettercontent.bettervillagefortifications.diagnostics.PlaytestLog.Context context(ServerLevel level, BlockPos origin) {
+        return new com.bettercontent.bettervillagefortifications.diagnostics.PlaytestLog.Context("server",
+                level.dimension().location().toString(), level.getGameTime(), "",
+                origin.getX() + "," + origin.getY() + "," + origin.getZ());
+    }
+
+    private static void outcome(ServerLevel level, BlockPos origin, String result, String reason) {
         var log = com.bettercontent.bettervillagefortifications.PlaytestDiagnostics.LOG;
-        if (log.enabled("walls")) log.event("walls", "village_wall.build", "server", result, reason, null);
+        if (log.enabled("walls")) com.bettercontent.bettervillagefortifications.diagnostics.FeatureTelemetry.outcome(log,
+                context(level, origin), result, reason);
     }
 
     private static boolean placementAreaLoaded(ServerLevel level, Set<ChunkPos> chunks) {
@@ -249,7 +256,7 @@ public class AutoVillageWallBuilder {
             build.preloader.addTargets(ChunkLoadTracker.searchChunks(build.origin, SEARCH_RADIUS), MAX_PRELOAD_CHUNKS);
         }
         if (++build.preloadTicks > PRELOAD_TIMEOUT_TICKS) {
-            outcome("degraded", "preload_timeout_loaded_only");
+            outcome(level, build.origin, "degraded", "preload_timeout_loaded_only");
             build.disablePreload();
             return false;
         }
@@ -258,7 +265,7 @@ public class AutoVillageWallBuilder {
         budget.consume(progress.issued());
         if (progress.status() == VillageChunkPreloader.Status.FAILED) {
             VillageWalls.LOGGER.warn("Village wall preload failed at {}; using loaded chunks", build.origin);
-            outcome("degraded", "preload_failed_loaded_only");
+            outcome(level, build.origin, "degraded", "preload_failed_loaded_only");
             build.disablePreload();
             return false;
         }
@@ -278,13 +285,13 @@ public class AutoVillageWallBuilder {
                 return false;
             }
             if (build.style.thickness() > MAX_PRELOADED_STYLE_THICKNESS) {
-                outcome("degraded", "style_exceeds_preload_width");
+                outcome(level, build.origin, "degraded", "style_exceeds_preload_width");
                 build.disablePreload();
                 return false;
             }
             if (!build.preloader.addTargets(generator.placementChunks(build.preparation,
                     PLACEMENT_PRELOAD_MARGIN + build.style.thickness()), MAX_PRELOAD_CHUNKS)) {
-                outcome("degraded", "preload_area_limit");
+                outcome(level, build.origin, "degraded", "preload_area_limit");
                 build.disablePreload();
                 return false;
             }
@@ -362,8 +369,8 @@ public class AutoVillageWallBuilder {
                     }
                     CellKey key = CellKey.from(origin);
                     if (!processed.contains(key) && !levelPending.containsKey(key)) {
-                        outcome("queued", source);
                         levelPending.put(key, new PendingBuild(origin));
+                        outcome(level, origin, "queued", source);
                     }
                 });
 

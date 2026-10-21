@@ -9,6 +9,11 @@ rejects ERROR/FATAL diagnostics even when required tests and the process report 
 
 ## Playtest logging
 
+Operational preload/style warnings retain their original WARN conditions and native village origin.
+Queued, degraded and generation outcomes carry the same village origin plus dimension/game tick,
+so concurrent villages can be distinguished without a new job ledger or per-block records. These
+bounded causal coordinates are intentional; no player names, payloads or seeds are logged.
+
 `bc.playtest.better_village_fortifications.walls` observes queue/chance/generation outcomes and
 loaded-only degradation after preload timeout/failure. No-footprint is an ordinary deferred
 outcome, not a warning. Existing exceptional preload failures remain visible outside detail
