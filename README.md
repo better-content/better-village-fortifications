@@ -23,11 +23,7 @@ reports effective common-config automatic enablement and loaded version/mode/lim
 source identity is `UNKNOWN`. Stop/disconnect clears transient keys without rearming process
 allowances. Pure emitter/contracts supplement native generation/preloader gates.
 
-## Scope and authority
-
-This repository owns its mod-specific behavior and authoring inputs. Read [local instructions](AGENTS.md)
-and the [shared documentation/policy index](../../better-content-modpack/docs/README.md).
-
+## Scope
 
 Village Walls is a server-side mod that detects a village footprint from generated village structures or village POIs, expands it by a configurable buffer, and builds enclosing walls from data-driven styles. It then finds the flattest wall segments and places adjacent double-door gates there.
 
