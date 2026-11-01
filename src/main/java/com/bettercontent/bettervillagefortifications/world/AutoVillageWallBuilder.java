@@ -70,7 +70,7 @@ public class AutoVillageWallBuilder {
         if (!(event.getLevel() instanceof ServerLevel level)) {
             return;
         }
-        if (!VillageWallsConfig.AUTOMATIC_WALLS_ENABLED.get()) {
+        if (!VillageWallsConfig.AUTOMATIC_WALLS_ENABLED.get() && !WorldAxiomPolicy.fortified(level.getServer())) {
             return;
         }
 
@@ -98,7 +98,7 @@ public class AutoVillageWallBuilder {
         }
 
         MinecraftServer server = event.getServer();
-        if (VillageWallsConfig.AUTOMATIC_WALLS_ENABLED.get()) {
+        if (VillageWallsConfig.AUTOMATIC_WALLS_ENABLED.get() || WorldAxiomPolicy.fortified(server)) {
             playerScanCooldown--;
             if (playerScanCooldown <= 0) {
                 playerScanCooldown = PLAYER_SCAN_INTERVAL_TICKS;
@@ -163,7 +163,8 @@ public class AutoVillageWallBuilder {
                 continue;
             }
 
-            if (!build.chanceRolled && level.getRandom().nextDouble() >= VillageWallsConfig.AUTOMATIC_WALL_CHANCE.get()) {
+            if (!build.chanceRolled && !WorldAxiomPolicy.fortified(level.getServer())
+                    && level.getRandom().nextDouble() >= VillageWallsConfig.AUTOMATIC_WALL_CHANCE.get()) {
                 outcome(level, build.origin, "skipped", "configured_chance");
                 processed.add(key);
                 levelPending.remove(key);
