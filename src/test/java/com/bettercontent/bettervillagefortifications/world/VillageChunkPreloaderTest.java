@@ -2,6 +2,8 @@ package com.bettercontent.bettervillagefortifications.world;
 
 import net.minecraft.world.level.ChunkPos;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -69,14 +71,16 @@ class VillageChunkPreloaderTest {
         assertEquals(2, preloader.targetCount());
     }
 
-    @Test
-    void failedFutureReleasesTicketOnClose() {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void failedOrPrematurelySuccessfulFutureReleasesTicketOnClose(boolean futureReportsSuccess) {
         FakeLoader loader = new FakeLoader();
         VillageChunkPreloader preloader = new VillageChunkPreloader(loader);
         ChunkPos target = new ChunkPos(4, 5);
         preloader.addTargets(List.of(target), 1);
         preloader.tick(1, 1);
-        loader.pending.get(target).complete(false);
+        // A successful future without a loaded FULL chunk must not mark the preload ready.
+        loader.pending.get(target).complete(futureReportsSuccess);
         assertEquals(VillageChunkPreloader.Status.FAILED, preloader.tick(1, 1).status());
         preloader.close();
         assertEquals(List.of(target), loader.released);
